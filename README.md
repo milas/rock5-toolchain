@@ -111,10 +111,7 @@ The `out/` directory will be bind-mounted to `/out`.
 If you're in the repo root directory, this means you can use relative paths:
 ```shell
 # build u-boot to get the SPL bootloader
-make u-boot
-
-# build the rkdeveloptool image
-make rkdeveloptool
+docker buildx bake u-boot
 
 # initialize the bootloader on the device in maskrom mode
 ./rkdeveloptool-docker.sh db ./out/u-boot/rk3588_spl_loader_v1.08.111.bin
