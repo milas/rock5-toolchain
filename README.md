@@ -82,7 +82,7 @@ sudo rkdeveloptool wl 0x0 ./out/u-boot/spi/spi_image.img
 ## EDK2
 **Upstream**: https://github.com/edk2-porting/edk2-rk35xx
 ```shell
-make edk2
+docker buildx bake edk2
 ```
 ```
 out/edk2
