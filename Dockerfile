@@ -1,4 +1,6 @@
 # syntax=docker/dockerfile:1
+ARG DEFCONFIG
+
 FROM alpine AS fetch
 WORKDIR /code
 RUN apk add --no-cache \
@@ -35,17 +37,20 @@ FROM debian:bullseye AS sdk-base
 
 RUN apt-get update && \
     apt-get install -y \
+        bc \
+        bison \
+        build-essential \
         device-tree-compiler \
+        dosfstools \
+        ccache \
+        flex \
+        git \
+        kmod \
         libncurses5 \
         libncurses5-dev \
-        build-essential \
         libssl-dev \
         mtools \
-        bc \
         python \
-        dosfstools \
-        bison \
-        flex \
         rsync \
         u-boot-tools \
     ;
@@ -64,19 +69,47 @@ ENV PATH="/rk3588-sdk/toolchain/bin:${PATH}"
 
 # --------------------------------------------------------------------------- #
 
-FROM sdk AS kernel-build
+FROM sdk AS kernel-builder
+
+ENV ARCH=arm64
+ENV CROSS_COMPILE=aarch64-none-linux-gnu-
+ENV INSTALL_MOD_PATH=/rk3588-sdk/out/kernel/modules
+
+RUN mkdir -p /rk3588-sdk/ccache/bin \
+    && ln -s /usr/bin/ccache /rk3588-sdk/ccache/bin/aarch64-none-linux-gnu-gcc \
+    && ln -s /usr/bin/ccache /rk3588-sdk/ccache/bin/aarch64-none-linux-gnu-g++ \
+    ;
+ENV PATH="/rk3588-sdk/ccache/bin:${PATH}"
+ENV CCACHE_DIR=/rk3588-sdk/ccache/cache
+
+RUN mkdir -p ${INSTALL_MOD_PATH}
 
 COPY --from=git-kernel --link /code/kernel /rk3588-sdk/kernel
-RUN ./build/mk-kernel.sh rk3588-rock-5b
+
+FROM kernel-builder AS kernel-builder-custom
+
+ARG DEFCONFIG
+COPY ${DEFCONFIG} /rk3588-sdk/kernel/arch/arm64/configs/rockchip_linux_defconfig
+
+FROM kernel-builder${DEFCONFIG:+-custom} AS kernel-build
+RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
+    ./build/mk-kernel.sh rk3588-rock-5b
+RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
+    cd /rk3588-sdk/kernel && make modules modules_install
+
+FROM kernel-build AS firmware
+
+RUN cd /rk3588-sdk/kernel && make firmware
 
 FROM --platform=linux/arm64 scratch AS kernel
 
 COPY --from=kernel-build --link /rk3588-sdk/out/kernel/rk3588-rock-5b.dtb /dtb/rockchip/
 COPY --from=kernel-build --link /rk3588-sdk/out/kernel/Image /vmlinuz
+COPY --from=kernel-build --link /rk3588-sdk/out/kernel/modules /
 
 # --------------------------------------------------------------------------- #
 
-FROM sdk as u-boot-build
+FROM sdk AS u-boot-build
 
 COPY --from=git-u-boot --link /code/u-boot /rk3588-sdk/u-boot
 
@@ -88,7 +121,7 @@ COPY --from=u-boot-build --link /rk3588-sdk/out/u-boot/ /
 
 # --------------------------------------------------------------------------- #
 
-FROM sdk-base AS edk2-build
+FROM sdk AS edk2-build
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -106,9 +139,12 @@ COPY --from=git-edk2 --link /code/edk2-rk35xx /rk3588-sdk/edk2-rk35xx
 
 RUN /rk3588-sdk/edk2-rk35xx/build.sh -d rock-5b
 
+RUN ./rkbin/tools/loaderimage --pack --uboot ./workspace/Build/ROCK5B/DEBUG_GCC5/FV/NOR_FLASH_IMAGE.fd ./workspace/ROCK_5B_SDK_UEFI.img || true
+
 FROM --platform=linux/arm64 scratch AS edk2
 
 COPY --from=edk2-build --link /rk3588-sdk/edk2-rk35xx/RK3588_NOR_FLASH.img /
+COPY --from=edk2-build --link /rk3588-sdk/workspace/ROCK_5B_SDK_UEFI.img /
 
 # --------------------------------------------------------------------------- #
 

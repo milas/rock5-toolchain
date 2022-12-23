@@ -40,6 +40,11 @@ out/kernel
 └── vmlinuz
 ```
 
+To use a custom config, copy it to this repo and then set the `DEFCONFIG` environment variable:
+```shell
+DEFCONFIG="defconfig" docker buildx bake kernel
+```
+
 ## U-Boot
 **Upstream**: https://github.com/radxa/u-boot/tree/stable-5.10-rock5
 ```shell
