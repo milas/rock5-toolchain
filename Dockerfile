@@ -1,5 +1,13 @@
 # syntax=docker/dockerfile:1
 
+#### VIRTUAL TARGETS ####
+FROM scratch AS git-kernel
+FROM scratch AS git-u-boot
+FROM scratch AS git-rkbin
+FROM scratch AS git-radxa-build
+FROM scratch AS git-edk2
+FROM scratch AS git-rkdeveloptool
+
 FROM alpine AS fetch
 RUN apk add --no-cache \
     curl \

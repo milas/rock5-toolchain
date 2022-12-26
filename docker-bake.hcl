@@ -18,6 +18,12 @@ group default {
   targets = ["kernel", "u-boot", "edk2"]
 }
 
+target sdk {
+  target = "sdk"
+  tags = ["ghcr.io/milas/rock5b-sdk"]
+  contexts = git_contexts()
+}
+
 target kernel-builder {
   target     = "kernel-builder"
   tags       = ["ghcr.io/milas/rock5b-kernel-build"]
