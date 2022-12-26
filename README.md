@@ -12,11 +12,17 @@ Artifacts will be output to `out/` in the repo root:
 ```
 out
 ├── edk2
-│   └── RK3588_NOR_FLASH.img
+│   ├── RK3588_NOR_FLASH.img
+│   └── ROCK_5B_SDK_UEFI.img
 ├── kernel
 │   ├── dtb
 │   │   └── rockchip
-│   │       └── rk3588-rock-5b.dtb
+│   │       ├── overlay
+│   │       ├── rk3588-rock-5b.dtb
+│   │       └── rk3588-rock-5b-v11.dtb
+│   ├── lib
+│   │   └── modules
+│   │       └── 5.10.110-gb62cf4be15ea
 │   └── vmlinuz
 └── u-boot
     ├── idbloader.img
@@ -25,6 +31,7 @@ out
     │   └── spi_image.img
     └── u-boot.itb
 ```
+> NOTE: T
 
 ## Kernel
 **Upstream**: https://github.com/radxa/kernel/tree/linux-5.10-gen-rkr3.4
@@ -40,9 +47,15 @@ out/kernel
 └── vmlinuz
 ```
 
-To use a custom config, copy it to this repo and then set the `DEFCONFIG` environment variable:
+### Custom `defconfig`
+To use a custom config, create a subdirectory (within this repo) that contains your `rockchip_linux_defconfig`:
+```
+defconfig
+└── rockchip_linux_defconfig
+```
+Then, set the `DEFCONFIG` environment variable to the directory path and build:
 ```shell
-DEFCONFIG="defconfig" docker buildx bake kernel
+DEFCONFIG="./defconfig/" docker buildx bake kernel
 ```
 
 ## U-Boot

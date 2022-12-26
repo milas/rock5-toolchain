@@ -1,35 +1,14 @@
 # syntax=docker/dockerfile:1
-ARG DEFCONFIG
 
 FROM alpine AS fetch
-WORKDIR /code
 RUN apk add --no-cache \
     curl \
     git \
     ;
 
-FROM fetch AS git-kernel
-RUN git clone --branch=linux-5.10-gen-rkr3.4 --single-branch --depth=1 https://github.com/radxa/kernel.git
-
-FROM fetch AS git-u-boot
-RUN git clone --branch=stable-5.10-rock5 --single-branch --depth=1 https://github.com/radxa/u-boot.git
-
-FROM fetch AS git-rkbin
-RUN git clone --branch=master --single-branch --depth=1 https://github.com/radxa/rkbin.git
-
-FROM fetch AS git-radxa-build
-RUN git clone --branch=debian --single-branch --depth=1 https://github.com/radxa/build.git
-
 FROM fetch AS dl-toolchain
+WORKDIR /toolchain
 RUN curl -q https://dl.radxa.com/tools/linux/gcc-arm-10.3-2021.07-x86_64-aarch64-none-linux-gnu.tar.gz | tar zxv --strip-components 4
-
-FROM fetch AS git-edk2
-RUN git clone --branch=master --single-branch --depth=1 https://github.com/edk2-porting/edk2-rk35xx
-
-FROM fetch as git-rkdeveloptool
-RUN git clone --branch=master --single-branch --depth=1 https://github.com/rockchip-linux/rkdeveloptool
-RUN cd /code/rkdeveloptool \
-    && curl -qL https://github.com/rockchip-linux/rkdeveloptool/pull/57.patch | git apply
 
 # --------------------------------------------------------------------------- #
 
@@ -61,15 +40,23 @@ WORKDIR /rk3588-sdk
 
 FROM sdk-base AS sdk
 
-COPY --from=git-radxa-build --link /code/build /rk3588-sdk/build
-COPY --from=git-rkbin --link /code/rkbin /rk3588-sdk/rkbin
-COPY --from=dl-toolchain --link /code /rk3588-sdk/toolchain
+COPY --from=git-radxa-build --link / /rk3588-sdk/build
+COPY --from=git-rkbin --link / /rk3588-sdk/rkbin
+COPY --from=dl-toolchain --link /toolchain /rk3588-sdk/toolchain
 
 ENV PATH="/rk3588-sdk/toolchain/bin:${PATH}"
 
 # --------------------------------------------------------------------------- #
 
-FROM sdk AS kernel-builder
+# this is a circuitous no-op intended to be overridden via a var passed to
+# docker buildx bake (or alternatively, CLI flags to `buildx build`)
+FROM scratch AS defconfig
+
+COPY --from=git-kernel --link /arch/arm64/configs/rockchip_linux_defconfig /
+
+# --------------------------------------------------------------------------- #
+
+FROM sdk AS kernel-builder-base
 
 ENV ARCH=arm64
 ENV CROSS_COMPILE=aarch64-none-linux-gnu-
@@ -84,18 +71,21 @@ ENV CCACHE_DIR=/rk3588-sdk/ccache/cache
 
 RUN mkdir -p ${INSTALL_MOD_PATH}
 
-COPY --from=git-kernel --link /code/kernel /rk3588-sdk/kernel
+COPY --from=git-kernel --link / /rk3588-sdk/kernel/
 
-FROM kernel-builder AS kernel-builder-custom
+FROM kernel-builder-base AS kernel-builder
 
-ARG DEFCONFIG
-COPY ${DEFCONFIG} /rk3588-sdk/kernel/arch/arm64/configs/rockchip_linux_defconfig
+COPY --from=defconfig --link /rockchip_linux_defconfig /rk3588-sdk/kernel/arch/arm64/configs/rockchip_linux_defconfig
 
-FROM kernel-builder${DEFCONFIG:+-custom} AS kernel-build
+FROM kernel-builder AS kernel-build
 RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
     ./build/mk-kernel.sh rk3588-rock-5b
 RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
-    cd /rk3588-sdk/kernel && make modules modules_install
+    cd /rk3588-sdk/kernel \
+    && make modules modules_install \
+    && rm ${INSTALL_MOD_PATH}/lib/modules/*/build \
+    && rm ${INSTALL_MOD_PATH}/lib/modules/*/source \
+    ;
 
 FROM kernel-build AS firmware
 
@@ -103,15 +93,19 @@ RUN cd /rk3588-sdk/kernel && make firmware
 
 FROM --platform=linux/arm64 scratch AS kernel
 
-COPY --from=kernel-build --link /rk3588-sdk/out/kernel/rk3588-rock-5b.dtb /dtb/rockchip/
 COPY --from=kernel-build --link /rk3588-sdk/out/kernel/Image /vmlinuz
+
+COPY --from=kernel-build --link /rk3588-sdk/kernel/arch/arm64/boot/dts/rockchip/rk3588-rock-5*.dtb /dtb/rockchip/
+COPY --from=kernel-build --link /rk3588-sdk/kernel/arch/arm64/boot/dts/rockchip/overlay/rock-5*.dtbo /dtb/rockchip/overlay/
 COPY --from=kernel-build --link /rk3588-sdk/out/kernel/modules /
 
 # --------------------------------------------------------------------------- #
 
-FROM sdk AS u-boot-build
+FROM sdk AS u-boot-builder
 
-COPY --from=git-u-boot --link /code/u-boot /rk3588-sdk/u-boot
+COPY --from=git-u-boot --link / /rk3588-sdk/u-boot
+
+FROM u-boot-builder AS u-boot-build
 
 RUN ./build/mk-uboot.sh rk3588-rock-5b
 
@@ -121,7 +115,7 @@ COPY --from=u-boot-build --link /rk3588-sdk/out/u-boot/ /
 
 # --------------------------------------------------------------------------- #
 
-FROM sdk AS edk2-build
+FROM sdk AS edk2-builder
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -135,7 +129,9 @@ RUN apt-get update && \
         uuid-dev \
     ;
 
-COPY --from=git-edk2 --link /code/edk2-rk35xx /rk3588-sdk/edk2-rk35xx
+COPY --from=git-edk2 --link / /rk3588-sdk/edk2-rk35xx
+
+FROM edk2-builder AS edk2-build
 
 RUN /rk3588-sdk/edk2-rk35xx/build.sh -d rock-5b
 
@@ -152,15 +148,18 @@ FROM sdk-base AS rkdeveloptool-build
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
+      curl \
       dh-autoreconf \
+      git \
       libudev-dev \
       libusb-1.0-0-dev \
       pkg-config \
     ;
 
-COPY --from=git-rkdeveloptool --link /code/rkdeveloptool/ /rk3588-sdk/rkdeveloptool
+COPY --from=git-rkdeveloptool --link / /rk3588-sdk/rkdeveloptool
 
 RUN cd /rk3588-sdk/rkdeveloptool \
+    && curl -qL https://github.com/rockchip-linux/rkdeveloptool/pull/57.patch | git apply \
     && aclocal \
     && autoreconf -i \
     && autoheader \
