@@ -16,7 +16,7 @@ RUN apk add --no-cache \
 
 FROM fetch AS dl-toolchain
 WORKDIR /toolchain
-RUN curl -q https://dl.radxa.com/tools/linux/gcc-arm-10.3-2021.07-x86_64-aarch64-none-linux-gnu.tar.gz | tar zxv --strip-components 4
+RUN curl -q https://dl.radxa.com/tools/linux/gcc-arm-10.3-2021.07-x86_64-aarch64-none-linux-gnu.tar.gz | tar zx --strip-components 4
 
 # --------------------------------------------------------------------------- #
 
