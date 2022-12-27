@@ -5,7 +5,7 @@ on:
     branches: [ 'main' ]
 
 env:
-  REGISTRY: ghcr.io
+  REGISTRY: docker.io
   USERNAME: ${{ github.actor }}
   IMAGE_NAME: ${{ github.repository }}
 
