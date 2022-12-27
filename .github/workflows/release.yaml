@@ -4,11 +4,6 @@ on:
   push:
     branches: [ 'main' ]
 
-env:
-  REGISTRY: docker.io
-  USERNAME: ${{ github.actor }}
-  IMAGE_NAME: ${{ github.repository }}
-
 jobs:
   sdk:
     runs-on: ubuntu-22.04
@@ -32,18 +27,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-      - name: Log in to GHCR
-        uses: docker/login-action@v2
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v4
         with:
-          images: ${{ env.REGISTRY }}/rock5b-sdk
+          images: docker.io/${{ github.actor }}/rock5b-sdk
           tags: |
             type=ref,event=branch
             type=ref,event=pr
