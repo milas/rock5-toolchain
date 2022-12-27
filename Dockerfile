@@ -105,6 +105,7 @@ COPY --from=kernel-build --link /rk3588-sdk/out/kernel/Image /vmlinuz
 
 COPY --from=kernel-build --link /rk3588-sdk/kernel/arch/arm64/boot/dts/rockchip/rk3588-rock-5*.dtb /dtb/rockchip/
 COPY --from=kernel-build --link /rk3588-sdk/kernel/arch/arm64/boot/dts/rockchip/overlay/rock-5*.dtbo /dtb/rockchip/overlay/
+COPY --from=kernel-build --link /rk3588-sdk/kernel/arch/arm64/boot/dts/rockchip/overlay/rk3588*.dtbo /dtb/rockchip/overlay/
 COPY --from=kernel-build --link /rk3588-sdk/out/kernel/modules /
 
 # --------------------------------------------------------------------------- #
