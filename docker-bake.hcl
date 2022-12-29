@@ -11,6 +11,7 @@ function git_contexts {
     git-radxa-build : "https://github.com/radxa/build.git#debian"
     git-edk2 : "https://github.com/edk2-porting/edk2-rk35xx.git#master"
     git-rkdeveloptool : "https://github.com/rockchip-linux/rkdeveloptool.git#master"
+    git-bsp: "https://github.com/radxa-repo/bsp.git#main"
   }
 }
 
@@ -68,5 +69,20 @@ target rkdeveloptool {
   dockerfile = "Dockerfile"
   tags = ["ghcr.io/milas/rkdeveloptool"]
   target = "rkdeveloptool"
+  contexts = git_contexts()
+}
+
+target bsp {
+  tags = ["ghcr.io/milas/radxa-bsp"]
+  target = "bsp"
+  contexts = git_contexts()
+  args = {
+    BUILDKIT_CONTEXT_KEEP_GIT_DIR: true
+  }
+}
+
+target radxa-kernel-patches {
+  target = "kernel-radxa-patches"
+  output = ["type=local,dest=./out/kernel/patches"]
   contexts = git_contexts()
 }

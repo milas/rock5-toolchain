@@ -7,6 +7,7 @@ FROM scratch AS git-rkbin
 FROM scratch AS git-radxa-build
 FROM scratch AS git-edk2
 FROM scratch AS git-rkdeveloptool
+FROM scratch AS git-bsp
 
 FROM alpine AS fetch
 RUN apk add --no-cache \
@@ -56,6 +57,16 @@ ENV PATH="/rk3588-sdk/toolchain/bin:${PATH}"
 
 # --------------------------------------------------------------------------- #
 
+FROM sdk-base AS bsp
+
+COPY --from=git-bsp --link / /rk3588-sdk/bsp
+
+FROM scratch AS kernel-radxa-patches
+
+COPY --from=git-bsp --link /linux/rockchip /
+
+# --------------------------------------------------------------------------- #
+
 # this is a circuitous no-op intended to be overridden via a var passed to
 # docker buildx bake (or alternatively, CLI flags to `buildx build`)
 FROM scratch AS defconfig
@@ -84,6 +95,19 @@ COPY --from=git-kernel --link / /rk3588-sdk/kernel/
 FROM kernel-builder-base AS kernel-builder
 
 COPY --from=defconfig --link /rockchip_linux_defconfig /rk3588-sdk/kernel/arch/arm64/configs/rockchip_linux_defconfig
+
+COPY --from=kernel-radxa-patches --link / /rk3588-sdk/kernel/patches
+RUN cd /rk3588-sdk/kernel \
+    && git config --global user.email "devnull@milas.dev" \
+    && git config --global user.name "Docker Build" \
+    && find /rk3588-sdk/kernel/patches \
+        -name '*.patch' \
+        -not -iname "*-rock-4*" \
+        -type f \
+        -print0 \
+      | sort -z \
+      | xargs -r0 git am --reject --whitespace=fix \
+    ;
 
 FROM kernel-builder AS kernel-build
 RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
