@@ -12,6 +12,7 @@ function git_contexts {
     git-edk2 : "https://github.com/edk2-porting/edk2-rk35xx.git#master"
     git-rkdeveloptool : "https://github.com/rockchip-linux/rkdeveloptool.git#master"
     git-bsp: "https://github.com/radxa-repo/bsp.git#main"
+    git-overlays: "https://github.com/radxa/overlays.git#main"
   }
 }
 

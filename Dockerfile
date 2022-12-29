@@ -8,6 +8,7 @@ FROM scratch AS git-radxa-build
 FROM scratch AS git-edk2
 FROM scratch AS git-rkdeveloptool
 FROM scratch AS git-bsp
+FROM scratch AS git-overlays
 
 FROM alpine AS fetch
 RUN apk add --no-cache \
@@ -94,7 +95,10 @@ COPY --from=git-kernel --link / /rk3588-sdk/kernel/
 
 FROM kernel-builder-base AS kernel-builder
 
-COPY --from=defconfig --link /rockchip_linux_defconfig /rk3588-sdk/kernel/arch/arm64/configs/rockchip_linux_defconfig
+RUN rm -rf /rk3588-sdk/kernel/arch/arm64/boot/dts/rockchip/overlay
+
+COPY --from=git-overlays --link /arch/arm64/boot/dts/amlogic/overlays /rk3588-sdk/kernel/arch/arm64/boot/dts/amlogic/overlays
+COPY --from=git-overlays --link /arch/arm64/boot/dts/rockchip/overlays /rk3588-sdk/kernel/arch/arm64/boot/dts/rockchip/overlays
 
 COPY --from=kernel-radxa-patches --link / /rk3588-sdk/kernel/patches
 RUN cd /rk3588-sdk/kernel \
@@ -108,6 +112,8 @@ RUN cd /rk3588-sdk/kernel \
       | sort -z \
       | xargs -r0 git am --reject --whitespace=fix \
     ;
+
+COPY --from=defconfig --link /rockchip_linux_defconfig /rk3588-sdk/kernel/arch/arm64/configs/rockchip_linux_defconfig
 
 FROM kernel-builder AS kernel-build
 RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
