@@ -31,7 +31,6 @@ out
     │   └── spi_image.img
     └── u-boot.itb
 ```
-> NOTE: T
 
 ## Kernel
 **Upstream**: https://github.com/radxa/kernel/tree/linux-5.10-gen-rkr3.4
@@ -142,10 +141,3 @@ Disable USB auto-suspend (run this on your host machine, not via Docker):
 sudo echo -1 > /sys/module/usbcore/parameters/autosuspend
 ```
 NOTE: This won't be preserved across reboots.
-
-### Fetching Latest from Git
-Docker will cache the Git repo from the latest `HEAD` of the branch the first time its run.
-
-Run with `GIT_FETCH=1` to force a re-clone of the repo. For example, `GIT_FETCH=1 docker buildx bake kernel` will re-clone the Kernel repo and re-build it.
-
-NOTE: This will re-clone the repo from scratch, which can take a bit, especially for the kernel.
