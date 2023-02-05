@@ -138,6 +138,6 @@ docker buildx bake u-boot
 ### `rkdeveloptool` Error: `Creating Comm Object failed!`
 Disable USB auto-suspend (run this on your host machine, not via Docker):
 ```shell
-sudo echo -1 > /sys/module/usbcore/parameters/autosuspend
+sudo sh -c 'echo -1 > /sys/module/usbcore/parameters/autosuspend'
 ```
 NOTE: This won't be preserved across reboots.
