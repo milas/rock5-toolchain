@@ -1,14 +1,37 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1-labs
 
-#### VIRTUAL TARGETS ####
+#### REPO TARGETS ####
 FROM scratch AS git-kernel
+
+ADD https://github.com/radxa/kernel.git#linux-5.10-gen-rkr3.4 /
+
 FROM scratch AS git-u-boot
+
+ADD https://github.com/radxa/u-boot.git#stable-5.10-rock5 /
+
 FROM scratch AS git-rkbin
+
+ADD https://github.com/radxa/rkbin.git#master /
+
 FROM scratch AS git-radxa-build
+
+ADD https://github.com/radxa/build.git#debian /
+
 FROM scratch AS git-edk2
+
+ADD https://github.com/edk2-porting/edk2-rk35xx.git#master /
+
 FROM scratch AS git-rkdeveloptool
+
+ADD https://github.com/rockchip-linux/rkdeveloptool.git#master /
+
 FROM scratch AS git-bsp
+
+ADD https://github.com/radxa-repo/bsp.git#main /
+
 FROM scratch AS git-overlays
+
+ADD https://github.com/radxa/overlays.git#main /
 
 FROM alpine AS fetch
 RUN apk add --no-cache \
