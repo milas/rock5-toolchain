@@ -1,11 +1,11 @@
-name: Create and publish a Docker image
+name: Tools & SDK
 
 on:
   push:
     branches: [ 'main' ]
 
 jobs:
-  sdk:
+  docker-images:
     runs-on: ubuntu-22.04
     permissions:
       contents: read

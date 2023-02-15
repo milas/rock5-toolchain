@@ -1,37 +1,53 @@
 # syntax=docker/dockerfile:1-labs
 
-#### REPO TARGETS ####
+#### GIT TARGETS ####
 FROM scratch AS git-kernel
 
-ADD https://github.com/radxa/kernel.git#linux-5.10-gen-rkr3.4 /
+ADD --keep-git-dir=true https://github.com/radxa/kernel.git#linux-5.10-gen-rkr3.4 /
+
+# --------------------------------------------------------------------------- #
 
 FROM scratch AS git-u-boot
 
 ADD https://github.com/radxa/u-boot.git#stable-5.10-rock5 /
 
+# --------------------------------------------------------------------------- #
+
 FROM scratch AS git-rkbin
 
 ADD https://github.com/radxa/rkbin.git#master /
+
+# --------------------------------------------------------------------------- #
 
 FROM scratch AS git-radxa-build
 
 ADD https://github.com/radxa/build.git#debian /
 
+# --------------------------------------------------------------------------- #
+
 FROM scratch AS git-edk2
 
 ADD https://github.com/edk2-porting/edk2-rk35xx.git#master /
+
+# --------------------------------------------------------------------------- #
 
 FROM scratch AS git-rkdeveloptool
 
 ADD https://github.com/rockchip-linux/rkdeveloptool.git#master /
 
+# --------------------------------------------------------------------------- #
+
 FROM scratch AS git-bsp
 
 ADD https://github.com/radxa-repo/bsp.git#main /
 
+# --------------------------------------------------------------------------- #
+
 FROM scratch AS git-overlays
 
 ADD https://github.com/radxa/overlays.git#main /
+
+# --------------------------------------------------------------------------- #
 
 FROM alpine AS fetch
 RUN apk add --no-cache \
@@ -39,9 +55,11 @@ RUN apk add --no-cache \
     git \
     ;
 
+# --------------------------------------------------------------------------- #
+
 FROM fetch AS dl-toolchain
 WORKDIR /toolchain
-RUN curl -q https://dl.radxa.com/tools/linux/gcc-arm-10.3-2021.07-x86_64-aarch64-none-linux-gnu.tar.gz | tar zx --strip-components 4
+RUN curl -sS https://dl.radxa.com/tools/linux/gcc-arm-10.3-2021.07-x86_64-aarch64-none-linux-gnu.tar.gz | tar -xz --strip-components=4
 
 # --------------------------------------------------------------------------- #
 
@@ -85,6 +103,8 @@ FROM sdk-base AS bsp
 
 COPY --from=git-bsp --link / /rk3588-sdk/bsp
 
+# --------------------------------------------------------------------------- #
+
 FROM scratch AS kernel-radxa-patches
 
 COPY --from=git-bsp --link /linux/rockchip /
@@ -102,7 +122,6 @@ COPY --from=git-kernel --link /arch/arm64/configs/rockchip_linux_defconfig /
 FROM sdk AS kernel-builder-base
 
 ENV ARCH=arm64
-ENV CROSS_COMPILE=aarch64-none-linux-gnu-
 ENV INSTALL_MOD_PATH=/rk3588-sdk/out/kernel/modules
 
 RUN mkdir -p /rk3588-sdk/ccache/bin \
@@ -116,7 +135,20 @@ RUN mkdir -p ${INSTALL_MOD_PATH}
 
 COPY --from=git-kernel --link / /rk3588-sdk/kernel/
 
-FROM kernel-builder-base AS kernel-builder
+# --------------------------------------------------------------------------- #
+
+FROM kernel-builder-base AS kernel-builder-base-arm64
+# no extra configuration required
+
+# --------------------------------------------------------------------------- #
+
+FROM kernel-builder-base AS kernel-builder-base-amd64
+
+ENV CROSS_COMPILE=aarch64-none-linux-gnu-
+
+# --------------------------------------------------------------------------- #
+
+FROM kernel-builder-base-${BUILDARCH} AS kernel-builder
 
 RUN rm -rf /rk3588-sdk/kernel/arch/arm64/boot/dts/rockchip/overlay
 
@@ -138,7 +170,17 @@ RUN cd /rk3588-sdk/kernel \
 
 COPY --from=defconfig --link /rockchip_linux_defconfig /rk3588-sdk/kernel/arch/arm64/configs/rockchip_linux_defconfig
 
-FROM kernel-builder AS kernel-build
+# --------------------------------------------------------------------------- #
+
+FROM kernel-builder AS kernel-build-config
+RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
+    cd /rk3588-sdk/kernel \
+    && make rockchip_linux_defconfig \
+    ;
+
+# --------------------------------------------------------------------------- #
+
+FROM kernel-build-config AS kernel-build
 RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
     ./build/mk-kernel.sh rk3588-rock-5b
 RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
@@ -151,6 +193,8 @@ RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
 FROM kernel-build AS firmware
 
 RUN cd /rk3588-sdk/kernel && make firmware
+
+# --------------------------------------------------------------------------- #
 
 FROM --platform=linux/arm64 scratch AS kernel
 
@@ -167,9 +211,13 @@ FROM sdk AS u-boot-builder
 
 COPY --from=git-u-boot --link / /rk3588-sdk/u-boot
 
+# --------------------------------------------------------------------------- #
+
 FROM u-boot-builder AS u-boot-build
 
 RUN ./build/mk-uboot.sh rk3588-rock-5b
+
+# --------------------------------------------------------------------------- #
 
 FROM --platform=linux/arm64 scratch AS u-boot
 
@@ -193,11 +241,15 @@ RUN apt-get update && \
 
 COPY --from=git-edk2 --link / /rk3588-sdk/edk2-rk35xx
 
+# --------------------------------------------------------------------------- #
+
 FROM edk2-builder AS edk2-build
 
 RUN /rk3588-sdk/edk2-rk35xx/build.sh -d rock-5b
 
 RUN ./rkbin/tools/loaderimage --pack --uboot ./workspace/Build/ROCK5B/DEBUG_GCC5/FV/NOR_FLASH_IMAGE.fd ./workspace/ROCK_5B_SDK_UEFI.img || true
+
+# --------------------------------------------------------------------------- #
 
 FROM --platform=linux/arm64 scratch AS edk2
 
@@ -229,6 +281,8 @@ RUN cd /rk3588-sdk/rkdeveloptool \
     && ./configure \
     && make \
     ;
+
+# --------------------------------------------------------------------------- #
 
 FROM debian:bullseye AS rkdeveloptool
 
