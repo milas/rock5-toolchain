@@ -71,6 +71,14 @@ RUN curl -sS https://dl.radxa.com/tools/linux/gcc-arm-10.3-2021.07-x86_64-aarch6
 
 # --------------------------------------------------------------------------- #
 
+FROM fetch AS dl-drbd
+WORKDIR /drbd
+RUN curl -sS https://pkg.linbit.com/downloads/drbd/9/drbd-9.2.2.tar.gz | tar -xz --strip-components=1
+#ARG DRBD_URL=https://pkg.linbit.com//downloads/drbd/9.0/drbd-9.0.32-1.tar.gz
+#RUN curl -sS "${DRBD_URL}" | tar -xz --strip-components=1
+
+# --------------------------------------------------------------------------- #
+
 FROM --platform=${BUILDPLATFORM} debian:bullseye AS sdk-deps
 
 RUN apt-get update && \
@@ -226,6 +234,44 @@ RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
     ;
 
 RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache ccache --show-stats > /rk3588-sdk/out/ccache-kernel-firmware.log
+
+# --------------------------------------------------------------------------- #
+
+FROM kernel-build-config AS drbd-builder
+WORKDIR /drbd
+
+COPY --from=dl-drbd --link /drbd /drbd
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        coccinelle \
+        python2.7 \
+        python2.7-dev \
+    ;
+
+# --------------------------------------------------------------------------- #
+
+FROM drbd-builder AS drbd-build
+RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
+    make -C /drbd/drbd KERNEL_SOURCES=/rk3588-sdk/kernel MODVERSIONS=detect KDIR=/rk3588-sdk/kernel \
+    ;
+
+RUN \
+    mkdir -p /rootfs/lib/modules/$(cat /rk3588-sdk/kernel/include/config/kernel.release)/ \
+    && cp /rk3588-sdk/kernel/modules.order /rootfs/lib/modules/$(cat /rk3588-sdk/kernel/include/config/kernel.release)/ \
+    && cp /rk3588-sdk/kernel/modules.builtin /rootfs/lib/modules/$(cat /rk3588-sdk/kernel/include/config/kernel.release)/ \
+    && cp /rk3588-sdk/kernel/modules.builtin.modinfo /rootfs/lib/modules/$(cat /rk3588-sdk/kernel/include/config/kernel.release)/ \
+    ;
+
+RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
+    make -C /rk3588-sdk/kernel M=/drbd/drbd modules_install DESTDIR=/rootfs INSTALL_MOD_PATH=/rootfs INSTALL_MOD_DIR=extras \
+    ;
+
+# --------------------------------------------------------------------------- #
+
+FROM --platform=linux/arm64 scratch AS drbd
+
+COPY --from=drbd-build --link /rootfs /
 
 # --------------------------------------------------------------------------- #
 

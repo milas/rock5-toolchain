@@ -96,3 +96,12 @@ target edk2 {
     BOARD = BOARD
   }
 }
+
+target drbd {
+  target = "drbd-build"
+  tags = ["milas/drbd-build"]
+  args = {
+    KERNEL_REPO = "https://github.com/RadxaStephen/kernel.git"
+    KERNEL_REF  = "linux-5.10-gen-rkr3.6"
+  }
+}
