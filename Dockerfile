@@ -7,7 +7,7 @@ ADD --keep-git-dir=true https://github.com/radxa/kernel.git#linux-5.10-gen-rkr3.
 
 # --------------------------------------------------------------------------- #
 
-FROM scratch AS git-u-boot
+FROM scratch AS git-u-boot-radxa
 
 ADD https://github.com/radxa/u-boot.git#stable-5.10-rock5 /
 
@@ -57,8 +57,8 @@ RUN apk add --no-cache \
 
 # --------------------------------------------------------------------------- #
 
-FROM fetch AS dl-toolchain
-WORKDIR /toolchain
+FROM fetch AS dl-cross-compiler
+WORKDIR /cross-compile
 RUN curl -sS https://dl.radxa.com/tools/linux/gcc-arm-10.3-2021.07-x86_64-aarch64-none-linux-gnu.tar.gz | tar -xz --strip-components=4
 
 # --------------------------------------------------------------------------- #
@@ -85,17 +85,39 @@ RUN apt-get update && \
         u-boot-tools \
     ;
 
+RUN ln -s /usr/bin/ccache /usr/local/bin/gcc \
+    && ln -s /usr/bin/ccache /usr/local/bin/g++ \
+    ;
+ENV CCACHE_DIR=/rk3588-sdk/ccache/cache
+
 WORKDIR /rk3588-sdk
 
 # --------------------------------------------------------------------------- #
 
-FROM sdk-base AS sdk
+FROM sdk-base AS sdk-base-amd64
+
+COPY --from=dl-cross-compiler --link /cross-compile /rk3588-sdk/cross-compile
+
+RUN mkdir -p /rk3588-sdk/ccache/bin \
+    && ln -s /usr/bin/ccache /rk3588-sdk/ccache/bin/aarch64-none-linux-gnu-gcc \
+    && ln -s /usr/bin/ccache /rk3588-sdk/ccache/bin/aarch64-none-linux-gnu-g++ \
+    ;
+
+# ccache shims first, then real cross-compiler
+ENV PATH="/rk3588-sdk/ccache/bin:/rk3588-sdk/cross-compile/bin:${PATH}"
+ENV CROSS_COMPILE=aarch64-none-linux-gnu-
+
+# --------------------------------------------------------------------------- #
+
+FROM sdk-base AS sdk-base-arm64
+# no extra configuration required
+
+# --------------------------------------------------------------------------- #
+
+FROM sdk-base-${BUILDARCH} AS sdk
 
 COPY --from=git-radxa-build --link / /rk3588-sdk/build
 COPY --from=git-rkbin --link / /rk3588-sdk/rkbin
-COPY --from=dl-toolchain --link /toolchain /rk3588-sdk/toolchain
-
-ENV PATH="/rk3588-sdk/toolchain/bin:${PATH}"
 
 # --------------------------------------------------------------------------- #
 
@@ -121,44 +143,25 @@ COPY --from=git-kernel --link /arch/arm64/configs/rockchip_linux_defconfig /
 
 FROM sdk AS kernel-builder-base
 
-ENV ARCH=arm64
-ENV INSTALL_MOD_PATH=/rk3588-sdk/out/kernel/modules
-
-RUN mkdir -p /rk3588-sdk/ccache/bin \
-    && ln -s /usr/bin/ccache /rk3588-sdk/ccache/bin/aarch64-none-linux-gnu-gcc \
-    && ln -s /usr/bin/ccache /rk3588-sdk/ccache/bin/aarch64-none-linux-gnu-g++ \
-    ;
-ENV PATH="/rk3588-sdk/ccache/bin:${PATH}"
-ENV CCACHE_DIR=/rk3588-sdk/ccache/cache
-
-RUN mkdir -p ${INSTALL_MOD_PATH}
-
 COPY --from=git-kernel --link / /rk3588-sdk/kernel/
 
-# --------------------------------------------------------------------------- #
-
-FROM kernel-builder-base AS kernel-builder-base-arm64
-# no extra configuration required
+ENV ARCH=arm64
 
 # --------------------------------------------------------------------------- #
 
-FROM kernel-builder-base AS kernel-builder-base-amd64
+FROM kernel-builder-base AS kernel-builder
 
-ENV CROSS_COMPILE=aarch64-none-linux-gnu-
-
-# --------------------------------------------------------------------------- #
-
-FROM kernel-builder-base-${BUILDARCH} AS kernel-builder
-
-RUN rm -rf /rk3588-sdk/kernel/arch/arm64/boot/dts/rockchip/overlay
+# RUN rm -rf /rk3588-sdk/kernel/arch/arm64/boot/dts/rockchip/overlay
 
 COPY --from=git-overlays --link /arch/arm64/boot/dts/amlogic/overlays /rk3588-sdk/kernel/arch/arm64/boot/dts/amlogic/overlays
 COPY --from=git-overlays --link /arch/arm64/boot/dts/rockchip/overlays /rk3588-sdk/kernel/arch/arm64/boot/dts/rockchip/overlays
-
 COPY --from=kernel-radxa-patches --link / /rk3588-sdk/kernel/patches
+
+COPY --from=defconfig --link /rockchip_linux_defconfig /rk3588-sdk/kernel/arch/arm64/configs/rockchip_linux_defconfig
+
 RUN cd /rk3588-sdk/kernel \
-    && git config --global user.email "devnull@milas.dev" \
-    && git config --global user.name "Docker Build" \
+    && git config --global user.email "rock5-docker@milas.dev" \
+    && git config --global user.name "Rock 5 Docker Build User" \
     && find /rk3588-sdk/kernel/patches \
         -name '*.patch' \
         -not -iname "*-rock-4*" \
@@ -168,7 +171,7 @@ RUN cd /rk3588-sdk/kernel \
       | xargs -r0 git am --reject --whitespace=fix \
     ;
 
-COPY --from=defconfig --link /rockchip_linux_defconfig /rk3588-sdk/kernel/arch/arm64/configs/rockchip_linux_defconfig
+RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache mkdir -p /rk3588-sdk/out/kernel && ccache --show-stats > /rk3588-sdk/out/kernel/ccache.before.log
 
 # --------------------------------------------------------------------------- #
 
@@ -183,6 +186,10 @@ RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
 FROM kernel-build-config AS kernel-build
 RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
     ./build/mk-kernel.sh rk3588-rock-5b
+
+ENV INSTALL_MOD_PATH=/rk3588-sdk/out/kernel/modules
+RUN mkdir -p ${INSTALL_MOD_PATH}
+
 RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
     cd /rk3588-sdk/kernel \
     && make modules modules_install \
@@ -190,9 +197,16 @@ RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
     && rm ${INSTALL_MOD_PATH}/lib/modules/*/source \
     ;
 
+RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache ccache --show-stats > /rk3588-sdk/out/kernel/ccache.after.log
+
+# --------------------------------------------------------------------------- #
+
 FROM kernel-build AS firmware
 
-RUN cd /rk3588-sdk/kernel && make firmware
+RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
+    cd /rk3588-sdk/kernel \
+    && make firmware \
+    ;
 
 # --------------------------------------------------------------------------- #
 
@@ -207,21 +221,21 @@ COPY --from=kernel-build --link /rk3588-sdk/out/kernel/modules /
 
 # --------------------------------------------------------------------------- #
 
-FROM sdk AS u-boot-builder
+FROM sdk AS u-boot-radxa-builder
 
-COPY --from=git-u-boot --link / /rk3588-sdk/u-boot
+COPY --from=git-u-boot-radxa --link / /rk3588-sdk/u-boot
 
 # --------------------------------------------------------------------------- #
 
-FROM u-boot-builder AS u-boot-build
+FROM u-boot-radxa-builder AS u-boot-radxa-build
 
 RUN ./build/mk-uboot.sh rk3588-rock-5b
 
 # --------------------------------------------------------------------------- #
 
-FROM --platform=linux/arm64 scratch AS u-boot
+FROM --platform=linux/arm64 scratch AS u-boot-radxa
 
-COPY --from=u-boot-build --link /rk3588-sdk/out/u-boot/ /
+COPY --from=u-boot-radxa-build --link /rk3588-sdk/out/u-boot/ /
 
 # --------------------------------------------------------------------------- #
 
