@@ -13,6 +13,12 @@ ADD https://github.com/radxa/u-boot.git#stable-5.10-rock5 /
 
 # --------------------------------------------------------------------------- #
 
+FROM scratch AS git-u-boot-collabora
+
+ADD https://gitlab.collabora.com/hardware-enablement/rockchip-3588/u-boot.git#2023.04-rc2-rock5b /
+
+# --------------------------------------------------------------------------- #
+
 FROM scratch AS git-rkbin
 
 ADD https://github.com/radxa/rkbin.git#master /
@@ -63,7 +69,7 @@ RUN curl -sS https://dl.radxa.com/tools/linux/gcc-arm-10.3-2021.07-x86_64-aarch6
 
 # --------------------------------------------------------------------------- #
 
-FROM debian:bullseye AS sdk-base
+FROM debian:bullseye AS sdk-deps
 
 RUN apt-get update && \
     apt-get install -y \
@@ -89,12 +95,13 @@ RUN ln -s /usr/bin/ccache /usr/local/bin/gcc \
     && ln -s /usr/bin/ccache /usr/local/bin/g++ \
     ;
 ENV CCACHE_DIR=/rk3588-sdk/ccache/cache
+ENV ARCH=arm64
 
 WORKDIR /rk3588-sdk
 
 # --------------------------------------------------------------------------- #
 
-FROM sdk-base AS sdk-base-amd64
+FROM sdk-deps AS sdk-base-amd64
 
 COPY --from=dl-cross-compiler --link /cross-compile /rk3588-sdk/cross-compile
 
@@ -109,12 +116,16 @@ ENV CROSS_COMPILE=aarch64-none-linux-gnu-
 
 # --------------------------------------------------------------------------- #
 
-FROM sdk-base AS sdk-base-arm64
+FROM sdk-deps AS sdk-base-arm64
 # no extra configuration required
 
 # --------------------------------------------------------------------------- #
 
-FROM sdk-base-${BUILDARCH} AS sdk
+FROM sdk-base-${BUILDARCH} AS sdk-base
+
+# --------------------------------------------------------------------------- #
+
+FROM sdk-base AS sdk
 
 COPY --from=git-radxa-build --link / /rk3588-sdk/build
 COPY --from=git-rkbin --link / /rk3588-sdk/rkbin
@@ -144,8 +155,6 @@ COPY --from=git-kernel --link /arch/arm64/configs/rockchip_linux_defconfig /
 FROM sdk AS kernel-builder-base
 
 COPY --from=git-kernel --link / /rk3588-sdk/kernel/
-
-ENV ARCH=arm64
 
 # --------------------------------------------------------------------------- #
 
@@ -229,13 +238,69 @@ COPY --from=git-u-boot-radxa --link / /rk3588-sdk/u-boot
 
 FROM u-boot-radxa-builder AS u-boot-radxa-build
 
-RUN ./build/mk-uboot.sh rk3588-rock-5b
+RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
+    ./build/mk-uboot.sh rk3588-rock-5b \
+    ;
 
 # --------------------------------------------------------------------------- #
 
 FROM --platform=linux/arm64 scratch AS u-boot-radxa
 
 COPY --from=u-boot-radxa-build --link /rk3588-sdk/out/u-boot/ /
+
+# --------------------------------------------------------------------------- #
+
+FROM sdk-base as u-boot-collabora-builder
+
+RUN apt-get update \
+    && apt-get install -y \
+    python3 \
+    python3-dev \
+    python3-pyelftools \
+    python3-setuptools \
+    swig \
+    ;
+
+COPY --from=git-rkbin --link /bin/rk35/rk3588_ddr_lp4_2112MHz_lp5_2736MHz_v1.08.bin /rk3588-sdk/u-boot/rockchip-tpl
+COPY --from=git-rkbin --link /bin/rk35/rk3588_bl31_v1.34.elf /rk3588-sdk/u-boot/atf-bl31
+COPY --from=git-u-boot-collabora --link / /rk3588-sdk/u-boot
+
+WORKDIR /rk3588-sdk/u-boot
+
+# --------------------------------------------------------------------------- #
+
+FROM u-boot-collabora-builder AS u-boot-collabora-build
+
+RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
+    cd /rk3588-sdk/u-boot \
+    && make rock5b-rk3588_defconfig \
+    && make \
+    ;
+
+# adapted from https://github.com/radxa/build/blob/223bcb503769e862a05ebe08c2d49348c050e732/mk-uboot.sh#L29-L41
+RUN <<EOF
+    SPI_IMAGE="/rk3588-sdk/u-boot/spi_image.img"
+  	dd if=/dev/zero of=$SPI_IMAGE bs=1M count=0 seek=16
+  	parted -s $SPI_IMAGE mklabel gpt
+  	parted -s $SPI_IMAGE unit s mkpart idbloader 64 7167
+  	parted -s $SPI_IMAGE unit s mkpart vnvm 7168 7679
+  	parted -s $SPI_IMAGE unit s mkpart reserved_space 7680 8063
+  	parted -s $SPI_IMAGE unit s mkpart reserved1 8064 8127
+  	parted -s $SPI_IMAGE unit s mkpart uboot_env 8128 8191
+  	parted -s $SPI_IMAGE unit s mkpart reserved2 8192 16383
+  	parted -s $SPI_IMAGE unit s mkpart uboot 16384 32734
+  	dd if=/rk3588-sdk/u-boot/idbloader.img of=$SPI_IMAGE seek=64 conv=notrunc
+  	dd if=/rk3588-sdk/u-boot/u-boot.itb of=$SPI_IMAGE seek=16384 conv=notrunc
+EOF
+
+# --------------------------------------------------------------------------- #
+
+FROM scratch AS u-boot-collabora
+
+COPY --from=git-rkbin --link /bin/rk35/rk3588_spl_loader_v1.08.111.bin /
+COPY --from=u-boot-collabora-build --link /rk3588-sdk/u-boot/idbloader.img /
+COPY --from=u-boot-collabora-build --link /rk3588-sdk/u-boot/u-boot.itb /
+COPY --from=u-boot-collabora-build --link /rk3588-sdk/u-boot/spi_image.img /spi/spi_image.img
 
 # --------------------------------------------------------------------------- #
 
