@@ -230,6 +230,12 @@ COPY --from=kernel-build --link /rk3588-sdk/out/kernel/modules /
 
 # --------------------------------------------------------------------------- #
 
+FROM --platform=linux/arm64 scratch as rkbin-spl
+
+COPY --from=git-rkbin --link /bin/rk35/rk3588_spl_loader_v1.08.111.bin /
+
+# --------------------------------------------------------------------------- #
+
 FROM sdk AS u-boot-radxa-builder
 
 COPY --from=git-u-boot-radxa --link / /rk3588-sdk/u-boot
@@ -295,16 +301,34 @@ EOF
 
 # --------------------------------------------------------------------------- #
 
-FROM scratch AS u-boot-collabora
+FROM --platform=linux/arm64 scratch AS u-boot-collabora
 
-COPY --from=git-rkbin --link /bin/rk35/rk3588_spl_loader_v1.08.111.bin /
+COPY --from=rkbin-spl --link / /
 COPY --from=u-boot-collabora-build --link /rk3588-sdk/u-boot/idbloader.img /
 COPY --from=u-boot-collabora-build --link /rk3588-sdk/u-boot/u-boot.itb /
 COPY --from=u-boot-collabora-build --link /rk3588-sdk/u-boot/spi_image.img /spi/spi_image.img
 
 # --------------------------------------------------------------------------- #
 
-FROM sdk AS edk2-builder
+FROM u-boot-radxa-builder AS u-boot-radxa-tools-build
+
+RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
+    cd /rk3588-sdk/u-boot \
+    && make rock-5b-rk3588_defconfig \
+    && make tools \
+    ;
+
+# --------------------------------------------------------------------------- #
+
+FROM scratch AS u-boot-radxa-tools
+
+COPY --from=u-boot-radxa-tools-build --link /rk3588-sdk/u-boot/tools/boot_merger /
+COPY --from=u-boot-radxa-tools-build --link /rk3588-sdk/u-boot/tools/loaderimage /
+COPY --from=u-boot-radxa-tools-build --link /rk3588-sdk/u-boot/tools/mkimage /
+
+# --------------------------------------------------------------------------- #
+
+FROM sdk-base AS edk2-deps
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -318,22 +342,36 @@ RUN apt-get update && \
         uuid-dev \
     ;
 
+# --------------------------------------------------------------------------- #
+
+FROM edk2-deps AS edk2-builder-base
+
 COPY --from=git-edk2 --link / /rk3588-sdk/edk2-rk35xx
 
 # --------------------------------------------------------------------------- #
 
-FROM edk2-builder AS edk2-build
+FROM edk2-builder-base AS edk2-builder-arm64
 
-RUN /rk3588-sdk/edk2-rk35xx/build.sh -d rock-5b
+# the vendored rkbin tools are all precompiled for x86, so need to grab them
+# from a u-boot build on arm64
+# see https://forum.radxa.com/t/edk2-uefi-firmware/14050/2
+ENV IDBLOCK_BUILDTOOL=mkimage
+COPY --from=u-boot-radxa-tools --link / /rk3588-sdk/edk2-rk35xx/misc/rkbin/tools/
 
-RUN ./rkbin/tools/loaderimage --pack --uboot ./workspace/Build/ROCK5B/DEBUG_GCC5/FV/NOR_FLASH_IMAGE.fd ./workspace/ROCK_5B_SDK_UEFI.img || true
+FROM edk2-builder-base AS edk2-builder-amd64
+
+# --------------------------------------------------------------------------- #
+
+FROM edk2-builder-${BUILDARCH} AS edk2-build
+
+RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
+    /rk3588-sdk/edk2-rk35xx/build.sh -d rock-5b
 
 # --------------------------------------------------------------------------- #
 
 FROM --platform=linux/arm64 scratch AS edk2
 
 COPY --from=edk2-build --link /rk3588-sdk/edk2-rk35xx/RK3588_NOR_FLASH.img /
-COPY --from=edk2-build --link /rk3588-sdk/workspace/ROCK_5B_SDK_UEFI.img /
 
 # --------------------------------------------------------------------------- #
 

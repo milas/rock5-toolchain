@@ -3,7 +3,7 @@ variable DEFCONFIG {
 }
 
 group default {
-  targets = ["kernel", "u-boot-radxa", "edk2"]
+  targets = ["kernel", "u-boot"]
 }
 
 target sdk {
@@ -60,4 +60,9 @@ target bsp {
 target radxa-kernel-patches {
   target = "kernel-radxa-patches"
   output = ["type=local,dest=./out/kernel/patches"]
+}
+
+target spl {
+  target = "rkbin-spl"
+  output = ["type=local,dest=./out"]
 }

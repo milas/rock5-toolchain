@@ -1,22 +1,22 @@
-# Rock 5B Build Scripts
-This is a Dockerized build environment for Rock 5B vendor kernel & related (e.g. U-Boot) components.
+# Rock 5 Toolchain
+Dockerized build system for Linux kernel & related (e.g. U-Boot) components for the Radxa Rock 5 series of devices
 
 ## Prerequisites
 * Docker w/ buildx plugin
+  * If `docker buildx inspect` works, you're all set!
 * `amd64` or `arm64` host
   * `amd64` uses `gcc-arm-10.3-2021.07-x86_64-aarch64-none-linux-gnu` as provided by Radxa for cross-compilation (no configuration needed)
 
 ## Quick Start
-Run `docker buildx bake` from the repo root to build the Kernel, U-Boot, and EDK2.
+Run `docker buildx bake` from the repo root to build the Kernel and stable U-Boot.
 
-Individual groups and targets also exist if you don't want to build everything.
+Individual groups and targets also exist if you don't want to build everything or want to use one of the experimental targets.
 
 Artifacts will be output to `out/` in the repo root:
 ```
 out
 ├── edk2
-│   ├── RK3588_NOR_FLASH.img
-│   └── ROCK_5B_SDK_UEFI.img
+│   └── RK3588_NOR_FLASH.img
 ├── kernel
 │   ├── dtb
 │   │   └── rockchip
@@ -25,7 +25,7 @@ out
 │   │       └── rk3588-rock-5b-v11.dtb
 │   ├── lib
 │   │   └── modules
-│   │       └── 5.10.110-gb62cf4be15ea
+│   │       └── 5.10.110-gd0b0fd354269
 │   └── vmlinuz
 └── u-boot
     ├── collabora
@@ -52,8 +52,15 @@ docker buildx bake kernel
 out/kernel
 ├── dtb
 │   └── rockchip
-│       └── rk3588-rock-5b.dtb
+│       ├── overlay
+│       ├── rk3588-rock-5b.dtb
+│       └── rk3588-rock-5b-v11.dtb
+├── lib
+│   └── modules
+│       └── 5.10.110-gd0b0fd354269
 └── vmlinuz
+
+# note: tree listing limited to three levels
 ```
 
 ### Custom `defconfig`
@@ -108,22 +115,27 @@ out/u-boot
 ```
 
 ### Flashing
-> 💁 Put the device into maskrom mode before proceeding!
+> 💁 Put the device into [maskrom mode](https://wiki.radxa.com/Rock5/install/spi#Advanced_.28external.29_method) before proceeding!
 
-> 🐳 Replace `sudo rkdeveloptool` with `./rkdeveloptool-docker.sh` to run via container
+> 🐳 Replace `sudo rkdeveloptool` with `./rkdeveloptool-docker.sh` to run via container (more details in the [`rkdeveloptool` (via Docker)](#rkdeveloptool-via-docker) section)
 
 First, run the bootloader to initialize the device for flashing:
 ```shell
-sudo rkdeveloptool db ./out/u-boot/rk3588_spl_loader_v1.08.111.bin
+sudo rkdeveloptool db ./out/rk3588_spl_loader_v1.08.111.bin
 ```
 
-#### Use SPI Image
-This is currently 
+#### Option 1: Convenience SPI Image
+The `spi_image.img` includes the pre-loader and U-Boot at the right offsets and is sized for the SPI chip.
 ```shell
+docker buildx bake spl
 sudo rkdeveloptool wl 0x0 ./out/u-boot/radxa/spi/spi_image.img
 ```
 
-#### Use Individual
+#### Option 2: Individual Components
+Alternatively, you can write the individual components at their offsets.
+
+This is helpful for non-SPI (e.g. eMMC) to avoid destroying the GPT partition table.
+
 1. Flash pre-loader:
    ```shell
    sudo rkdeveloptool wl 0x40 ./out/u-boot/idbloader.img
@@ -146,29 +158,24 @@ out/edk2
 ## `rkdeveloptool` (via Docker)
 **Upstream**: https://github.com/rockchip-linux/rkdeveloptool
 
-There's a Dockerized build for `rkdeveloptool`, which can be run as a **privileged** container with `/dev/usb` bind-mounted from the host.
+This is a Dockerized build for `rkdeveloptool`, which can be run as a **privileged** container with `/dev/usb` bind-mounted from the host.
 
-A helper script, `rkdeveloptool-docker.sh`, is provided.
-
-Build Docker image:
-```shell
-docker buildx bake --load rkdeveloptool
-```
-Run:
+A helper script, `rkdeveloptool-docker.sh`, is provided:
 ```shell
 ./rkdeveloptool-docker.sh ld
-
+```
+```
 DevNo=1 Vid=0x2207,Pid=0x350b,LocationID=704    Maskrom
 ```
 The `out/` directory will be bind-mounted to `/out`.
 
 If you're in the repo root directory, this means you can use relative paths:
 ```shell
-# build u-boot to get the SPL bootloader
-docker buildx bake u-boot
+# get the latest spl loader from radxa repos 
+docker buildx bake spl
 
 # initialize the bootloader on the device in maskrom mode
-./rkdeveloptool-docker.sh db ./out/u-boot/rk3588_spl_loader_v1.08.111.bin
+./rkdeveloptool-docker.sh db ./out/rk3588_spl_loader_v1.08.111.bin
 ```
 
 ## Troubleshooting
