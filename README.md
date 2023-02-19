@@ -3,10 +3,13 @@ This is a Dockerized build environment for Rock 5B vendor kernel & related (e.g.
 
 ## Prerequisites
 * Docker w/ buildx plugin
-* AMD64 host
+* `amd64` or `arm64` host
+  * `amd64` uses `gcc-arm-10.3-2021.07-x86_64-aarch64-none-linux-gnu` as provided by Radxa for cross-compilation (no configuration needed)
 
 ## Quick Start
 Run `docker buildx bake` from the repo root to build the Kernel, U-Boot, and EDK2.
+
+Individual groups and targets also exist if you don't want to build everything.
 
 Artifacts will be output to `out/` in the repo root:
 ```

@@ -8,7 +8,7 @@ group default {
 
 target sdk {
   target = "sdk"
-  tags = ["ghcr.io/milas/rock5b-sdk"]
+  tags = ["docker.io/milas/rock5-sdk"]
 }
 
 target kernel {
