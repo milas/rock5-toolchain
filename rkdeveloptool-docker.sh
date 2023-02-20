@@ -32,4 +32,4 @@ docker --context=default run \
   --init \
   --privileged \
   ${mnt_args:+${mnt_args}} \
-  ghcr.io/milas/rkdeveloptool "$@"
+  docker.io/milas/rkdeveloptool "$@"
