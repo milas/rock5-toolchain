@@ -55,7 +55,7 @@ ADD https://github.com/radxa/overlays.git#main /
 
 # --------------------------------------------------------------------------- #
 
-FROM alpine AS fetch
+FROM --platform=${BUILDPLATFORM} alpine AS fetch
 RUN apk add --no-cache \
     curl \
     git \
@@ -69,7 +69,7 @@ RUN curl -sS https://dl.radxa.com/tools/linux/gcc-arm-10.3-2021.07-x86_64-aarch6
 
 # --------------------------------------------------------------------------- #
 
-FROM debian:bullseye AS sdk-deps
+FROM --platform=${BUILDPLATFORM} debian:bullseye AS sdk-deps
 
 RUN apt-get update && \
     apt-get install -y \
@@ -127,7 +127,6 @@ FROM sdk-base-${BUILDARCH} AS sdk-base
 
 FROM sdk-base AS sdk
 
-COPY --from=git-radxa-build --link / /rk3588-sdk/build
 COPY --from=git-rkbin --link / /rk3588-sdk/rkbin
 
 # --------------------------------------------------------------------------- #
@@ -152,16 +151,11 @@ COPY --from=git-kernel --link /arch/arm64/configs/rockchip_linux_defconfig /
 
 # --------------------------------------------------------------------------- #
 
-FROM sdk AS kernel-builder-base
+FROM sdk AS kernel-builder
 
 COPY --from=git-kernel --link / /rk3588-sdk/kernel/
 
-# --------------------------------------------------------------------------- #
-
-FROM kernel-builder-base AS kernel-builder
-
-# RUN rm -rf /rk3588-sdk/kernel/arch/arm64/boot/dts/rockchip/overlay
-
+RUN rm -rf /rk3588-sdk/kernel/arch/arm64/boot/dts/rockchip/overlay
 COPY --from=git-overlays --link /arch/arm64/boot/dts/amlogic/overlays /rk3588-sdk/kernel/arch/arm64/boot/dts/amlogic/overlays
 COPY --from=git-overlays --link /arch/arm64/boot/dts/rockchip/overlays /rk3588-sdk/kernel/arch/arm64/boot/dts/rockchip/overlays
 COPY --from=kernel-radxa-patches --link / /rk3588-sdk/kernel/patches
@@ -180,8 +174,6 @@ RUN cd /rk3588-sdk/kernel \
       | xargs -r0 git am --reject --whitespace=fix \
     ;
 
-RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache mkdir -p /rk3588-sdk/out/kernel && ccache --show-stats > /rk3588-sdk/out/kernel/ccache.before.log
-
 # --------------------------------------------------------------------------- #
 
 FROM kernel-builder AS kernel-build-config
@@ -194,46 +186,59 @@ RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
 
 FROM kernel-build-config AS kernel-build
 
-ARG CHIP="rk3588"
-ARG BOARD="rock-5b"
-RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
-    ./build/mk-kernel.sh "${CHIP}-${BOARD}"
-
-ENV INSTALL_MOD_PATH=/rk3588-sdk/out/kernel/modules
-RUN mkdir -p ${INSTALL_MOD_PATH}
-
 RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
     cd /rk3588-sdk/kernel \
-    && make modules modules_install \
-    && rm ${INSTALL_MOD_PATH}/lib/modules/*/build \
-    && rm ${INSTALL_MOD_PATH}/lib/modules/*/source \
+    && make -j $(nproc) \
     ;
 
-RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache ccache --show-stats > /rk3588-sdk/out/kernel/ccache.after.log
+RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache ccache --show-stats > /rk3588-sdk/ccache/ccache-kernel-core.log
 
 # --------------------------------------------------------------------------- #
 
-FROM kernel-build AS firmware
+FROM kernel-build AS kernel-build-modules
+
+ENV INSTALL_MOD_PATH=/rk3588-sdk/out/kernel/modules
+RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
+    mkdir -p /out \
+    && cd /rk3588-sdk/kernel \
+    && make modules_install INSTALL_MOD_PATH=/out \
+    && rm /out/lib/modules/*/build \
+    && rm /out/lib/modules/*/source \
+    ;
+
+RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache ccache --show-stats > /rk3588-sdk/ccache/ccache-kernel-modules.log
+
+# --------------------------------------------------------------------------- #
+
+FROM scratch AS kernel-modules
+
+COPY --from=kernel-build-modules --link /out /
+
+# --------------------------------------------------------------------------- #
+
+FROM kernel-build AS kernel-build-firmware
 
 RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
     cd /rk3588-sdk/kernel \
     && make firmware \
     ;
 
+RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache ccache --show-stats > /rk3588-sdk/out/ccache-kernel-firmware.log
+
 # --------------------------------------------------------------------------- #
 
-FROM --platform=linux/arm64 scratch AS kernel
+FROM scratch AS kernel
 
-COPY --from=kernel-build --link /rk3588-sdk/out/kernel/Image /vmlinuz
+COPY --from=kernel-build --link /rk3588-sdk/kernel/arch/arm64/boot/Image /vmlinuz
 
 COPY --from=kernel-build --link /rk3588-sdk/kernel/arch/arm64/boot/dts/rockchip/rk3588-rock-5*.dtb /dtb/rockchip/
 COPY --from=kernel-build --link /rk3588-sdk/kernel/arch/arm64/boot/dts/rockchip/overlays/rock-5*.dtbo /dtb/rockchip/overlay/
 COPY --from=kernel-build --link /rk3588-sdk/kernel/arch/arm64/boot/dts/rockchip/overlays/rk3588*.dtbo /dtb/rockchip/overlay/
-COPY --from=kernel-build --link /rk3588-sdk/out/kernel/modules /
+COPY --from=kernel-modules --link / /
 
 # --------------------------------------------------------------------------- #
 
-FROM --platform=linux/arm64 scratch as rkbin-spl
+FROM scratch as rkbin-spl
 
 COPY --from=git-rkbin --link /bin/rk35/rk3588_spl_loader_v1.08.111.bin /
 
@@ -241,6 +246,7 @@ COPY --from=git-rkbin --link /bin/rk35/rk3588_spl_loader_v1.08.111.bin /
 
 FROM sdk AS u-boot-radxa-builder
 
+COPY --from=git-radxa-build --link / /rk3588-sdk/build
 COPY --from=git-u-boot-radxa --link / /rk3588-sdk/u-boot
 
 # --------------------------------------------------------------------------- #
@@ -255,7 +261,7 @@ RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
 
 # --------------------------------------------------------------------------- #
 
-FROM --platform=linux/arm64 scratch AS u-boot-radxa
+FROM scratch AS u-boot-radxa
 
 COPY --from=u-boot-radxa-build --link /rk3588-sdk/out/u-boot/ /
 
@@ -308,7 +314,7 @@ EOF
 
 # --------------------------------------------------------------------------- #
 
-FROM --platform=linux/arm64 scratch AS u-boot-collabora
+FROM scratch AS u-boot-collabora
 
 COPY --from=rkbin-spl --link / /
 COPY --from=u-boot-collabora-build --link /rk3588-sdk/u-boot/idbloader.img /
@@ -379,7 +385,7 @@ RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
 
 # --------------------------------------------------------------------------- #
 
-FROM --platform=linux/arm64 scratch AS edk2
+FROM scratch AS edk2
 
 COPY --from=edk2-build --link /rk3588-sdk/edk2-rk35xx/RK3588_NOR_FLASH.img /
 
