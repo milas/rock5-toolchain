@@ -193,8 +193,11 @@ RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
 # --------------------------------------------------------------------------- #
 
 FROM kernel-build-config AS kernel-build
+
+ARG CHIP="rk3588"
+ARG BOARD="rock-5b"
 RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
-    ./build/mk-kernel.sh rk3588-rock-5b
+    ./build/mk-kernel.sh "${CHIP}-${BOARD}"
 
 ENV INSTALL_MOD_PATH=/rk3588-sdk/out/kernel/modules
 RUN mkdir -p ${INSTALL_MOD_PATH}
@@ -244,8 +247,10 @@ COPY --from=git-u-boot-radxa --link / /rk3588-sdk/u-boot
 
 FROM u-boot-radxa-builder AS u-boot-radxa-build
 
+ARG CHIP="rk3588"
+ARG BOARD="rock-5b"
 RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
-    ./build/mk-uboot.sh rk3588-rock-5b \
+    ./build/mk-uboot.sh "${CHIP}-${BOARD}" \
     ;
 
 # --------------------------------------------------------------------------- #
@@ -277,9 +282,11 @@ WORKDIR /rk3588-sdk/u-boot
 
 FROM u-boot-collabora-builder AS u-boot-collabora-build
 
+ARG CHIP="rk3588"
+ARG BOARD="rock-5b"
 RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
     cd /rk3588-sdk/u-boot \
-    && make rock5b-rk3588_defconfig \
+    && make "${BOARD}-${CHIP}_defconfig" \
     && make \
     ;
 
@@ -312,9 +319,11 @@ COPY --from=u-boot-collabora-build --link /rk3588-sdk/u-boot/spi_image.img /spi/
 
 FROM u-boot-radxa-builder AS u-boot-radxa-tools-build
 
+ARG CHIP="rk3588"
+ARG BOARD="rock-5b"
 RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
     cd /rk3588-sdk/u-boot \
-    && make rock-5b-rk3588_defconfig \
+    && make "${BOARD}-${CHIP}_defconfig" \
     && make tools \
     ;
 
@@ -364,8 +373,9 @@ FROM edk2-builder-base AS edk2-builder-amd64
 
 FROM edk2-builder-${BUILDARCH} AS edk2-build
 
+ARG BOARD="rock-5b"
 RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
-    /rk3588-sdk/edk2-rk35xx/build.sh -d rock-5b
+    /rk3588-sdk/edk2-rk35xx/build.sh -d "${BOARD}"
 
 # --------------------------------------------------------------------------- #
 
