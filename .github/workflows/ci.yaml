@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-22.04
     permissions:
       contents: read
-      packages: write
+      packages: none
 
     outputs:
       image: ${{ steps.meta.tags }}
@@ -26,24 +26,46 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-      - name: GHCR Login
-        uses: docker/login-action@v2
+      - name: SDK Meta
+        id: sdk_meta
+        uses: docker/metadata-action@v4
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          images: docker.io/${{ github.actor }}/rock5-sdk
+          tags: |
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
 
-      - uses: actions/checkout@v3
-
-      - uses: docker/bake-action@v2
+      - name: SDK Image
+        uses: docker/build-push-action@v3
         with:
           push: true
           pull: true
-          targets: |
-            sdk
-            rkdeveloptool
-          set: |
-            *.cache-from=type=gha,mode=max
-            *.cache-to=type=gha,mode=max
-            sdk.platform=linux/amd64,linux/arm64
-            rkdeveloptool.platform=linux/amd64,linux/arm64
+          tags: ${{ steps.sdk_meta.outputs.tags }}
+          labels: ${{ steps.sdk_meta.outputs.labels }}
+          target: sdk
+          platforms: linux/amd64,linux/arm64
+          provenance: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: rkdeveloptool Meta
+        id: rkdeveloptool_meta
+        uses: docker/metadata-action@v4
+        with:
+          images: docker.io/${{ github.actor }}/rkdeveloptool
+          tags: |
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: rkdeveloptool Image
+        uses: docker/build-push-action@v3
+        with:
+          push: true
+          pull: true
+          tags: ${{ steps.rkdeveloptool_meta.outputs.tags }}
+          labels: ${{ steps.rkdeveloptool_meta.outputs.labels }}
+          target: rkdeveloptool
+          platforms: linux/amd64,linux/arm64
+          provenance: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

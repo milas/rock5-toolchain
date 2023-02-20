@@ -47,7 +47,7 @@ target edk2 {
 
 target rkdeveloptool {
   dockerfile = "Dockerfile"
-  tags = ["ghcr.io/milas/rkdeveloptool"]
+  tags = ["docker.io/milas/rkdeveloptool"]
   target = "rkdeveloptool"
 }
 
