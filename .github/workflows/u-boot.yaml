@@ -14,7 +14,7 @@ jobs:
     strategy:
       matrix:
         board: [rock-5a, rock-5b]
-        variant: [radxa, collabora]
+        variant: [radxa]
         exclude:
           - board: rock-5a
             variant: collabora
@@ -49,6 +49,9 @@ jobs:
             type=schedule,pattern={{date 'YYYYMMDD'}}
             type=schedule,pattern=latest
             type=raw,value=latest,enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.title=u-boot/${{ matrix.board }}/${{ matrix.variant }}
+            org.opencontainers.image.description=U-Boot bootloader for Rock 5
 
       - uses: docker/build-push-action@v3
         with:
