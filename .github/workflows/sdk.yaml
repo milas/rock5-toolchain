@@ -1,8 +1,8 @@
-name: Tools & SDK
+name: SDK
 
 on:
   push:
-    branches: [ 'main' ]
+    branches: [main]
 
 jobs:
   docker-images:
