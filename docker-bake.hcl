@@ -1,13 +1,13 @@
 variable DEFCONFIG {
-  default = ""
+  default = null
 }
 
 variable CHIP {
-  default = ""
+  default = null
 }
 
 variable BOARD {
-  default = ""
+  default = null
 }
 
 group default {
@@ -32,7 +32,7 @@ target kernel {
   dockerfile = "Dockerfile"
   target     = "kernel"
   output = ["type=local,dest=./out/kernel"]
-  contexts = notequal("", DEFCONFIG) ? { defconfig = DEFCONFIG } : {}
+  contexts = notequal(null, DEFCONFIG) ? { defconfig = DEFCONFIG } : {}
   args = {
     CHIP = CHIP
     BOARD = BOARD

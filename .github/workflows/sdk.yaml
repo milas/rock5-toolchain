@@ -5,11 +5,11 @@ on:
     branches: [main]
 
 jobs:
-  docker-images:
+  images:
     runs-on: ubuntu-22.04
     permissions:
       contents: read
-      packages: none
+      packages: write
 
     outputs:
       image: ${{ steps.meta.tags }}
@@ -23,14 +23,21 @@ jobs:
         uses: docker/login-action@v2
         with:
           registry: docker.io
-          username: ${{ github.actor }}
+          username: milas
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: GHCR Login
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: SDK Meta
         id: sdk_meta
         uses: docker/metadata-action@v4
         with:
-          images: docker.io/${{ github.actor }}/rock5-sdk
+          images: docker.io/milas/rock5-sdk
           tags: |
             type=ref,event=branch
             type=raw,value=latest,enable={{is_default_branch}}
@@ -52,7 +59,9 @@ jobs:
         id: rkdeveloptool_meta
         uses: docker/metadata-action@v4
         with:
-          images: docker.io/${{ github.actor }}/rkdeveloptool
+          images: |
+            docker.io/milas/rkdeveloptool
+            ghcr.io/milas/rkdeveloptool
           tags: |
             type=ref,event=branch
             type=raw,value=latest,enable={{is_default_branch}}

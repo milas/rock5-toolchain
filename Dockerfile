@@ -292,7 +292,7 @@ ARG CHIP="rk3588"
 ARG BOARD="rock-5b"
 RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
     cd /rk3588-sdk/u-boot \
-    && make "${BOARD}-${CHIP}_defconfig" \
+    && make "$(echo "${BOARD}" | tr -d '-')-${CHIP}_defconfig" \
     && make \
     ;
 
