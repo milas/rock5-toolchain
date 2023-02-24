@@ -63,16 +63,21 @@ out/kernel
 # note: tree listing limited to three levels
 ```
 
-### Custom `defconfig`
-To use a custom config, create a subdirectory (within this repo) that contains your `rockchip_linux_defconfig`:
-```
-defconfig
-└── rockchip_linux_defconfig
-```
-Then, set the `DEFCONFIG` environment variable to the directory path and build:
+### Custom Kernel Config (`defconfig`)
+You can generate a custom kernel config with the `defconfig.sh` script in this repo:
 ```shell
-DEFCONFIG="./defconfig/" docker buildx bake kernel
+./defconfig.sh
 ```
+
+This builds an image with the kernel sources and then runs `make menuconfig` in a container.
+Afterwards, the resulting configuration is copied to the current working directory as `rockchip_linux_defconfig`.
+
+Then, set the `DEFCONFIG` environment variable to the current directory:
+```shell
+DEFCONFIG='.' docker buildx bake kernel
+```
+This adds your current directory as an extra context for the build.
+The build will then copy & use `rockchip_linux_config` from your current directory to be used instead of the default Radxa config.
 
 ## U-Boot
 The buildx `u-boot` group will build both the stable U-Boot from Radxa as well as the experimental build from Collabora's mainline fork.

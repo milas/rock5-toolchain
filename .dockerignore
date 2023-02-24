@@ -1,1 +1,4 @@
-out/
+# none of the files in this repo are actually needed for the build except a custom
+# kernel config if using `defconfig.sh` for convenience, so we allow that
+*
+!rockchip_linux_defconfig
