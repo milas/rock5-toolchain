@@ -9,12 +9,12 @@ on:
 
 jobs:
   u-boot:
-    runs-on: ubuntu-22.04
+    runs-on: self-hosted
 
     strategy:
       matrix:
         board: [rock-5a, rock-5b]
-        variant: [radxa]
+        variant: [radxa, collabora]
         exclude:
           - board: rock-5a
             variant: collabora
