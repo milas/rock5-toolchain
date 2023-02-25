@@ -14,7 +14,7 @@ jobs:
     strategy:
       matrix:
         board: [rock-5a, rock-5b]
-        variant: [radxa, collabora]
+        variant: [radxa]
         exclude:
           - board: rock-5a
             variant: collabora
