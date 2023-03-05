@@ -28,14 +28,28 @@ target rkdeveloptool {
   tags       = ["docker.io/milas/rkdeveloptool"]
 }
 
+
+variable KERNEL_REPO {
+  default = null
+}
+
+variable KERNEL_REF {
+  default = null
+}
+
 target kernel {
-  dockerfile = "Dockerfile"
   target     = "kernel"
   output = ["type=local,dest=./out/kernel"]
+  extends = ["kernel-config"]
+}
+
+target kernel-config {
+  target = "kernel-build-config"
+  tags = ["milas/rock5-toolchain:kernel-config"]
   contexts = notequal(null, DEFCONFIG) ? { defconfig = DEFCONFIG } : {}
   args = {
-    CHIP = CHIP
-    BOARD = BOARD
+    KERNEL_REPO = KERNEL_REPO
+    KERNEL_REF = KERNEL_REF
   }
 }
 

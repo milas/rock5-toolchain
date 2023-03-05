@@ -18,7 +18,6 @@ self=$(
     echo "$(pwd -P)/${self##*/}"
 )
 
-DEFCONFIG_CTX=
 if [ -f rockchip_linux_defconfig ]; then
   >&2 echo "This will overwrite rockchip_linux_defconfig in $(pwd)"
   while true; do
@@ -29,18 +28,18 @@ if [ -f rockchip_linux_defconfig ]; then
       * ) ;;
     esac
   done
-  DEFCONFIG_CTX="--build-context=defconfig=."
+  DEFCONFIG="$(pwd)"
+  export DEFCONFIG
 fi
 
 docker rm -f rock5-kernel-config >/dev/null 2>&1 || true
 
-docker buildx build \
+# shellcheck disable=SC2086
+docker buildx bake \
   --pull \
-  --target=kernel-build-config \
-  --tag milas/rock5-toolchain:kernel-config \
-  "${DEFCONFIG_CTX}" \
   --load \
-  - < "$(dirname "${self}")"/Dockerfile
+  -f "$(dirname "${self}")"/docker-bake.hcl \
+  kernel-config
 
 docker run -it \
   --name rock5-kernel-config \

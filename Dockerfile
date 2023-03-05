@@ -3,7 +3,9 @@
 #### GIT TARGETS ####
 FROM scratch AS git-kernel
 
-ADD --keep-git-dir=true https://github.com/radxa/kernel.git#linux-5.10-gen-rkr3.4 /
+ARG KERNEL_REPO=https://github.com/radxa/kernel.git
+ARG KERNEL_REF=linux-5.10-gen-rkr3.4
+ADD --keep-git-dir=true ${KERNEL_REPO}#${KERNEL_REF} /
 
 # --------------------------------------------------------------------------- #
 
