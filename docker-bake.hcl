@@ -96,3 +96,44 @@ target edk2 {
     BOARD = BOARD
   }
 }
+
+group yolov8 {
+  targets = ["yolov8-model-onnx", "yolov8-model-rknn"]
+}
+
+target _yolov8-model {
+  context = "./rknn"
+  output = ["type=local,dest=./out/rknn"]
+  args = {
+    YOLO_MODEL = "yolov8s"
+  }
+}
+
+target yolov8-model-onnx {
+  inherits = ["_yolov8-model"]
+  target = "yolo-model-onnx"
+}
+
+target yolov8-model-rknn {
+  inherits = ["_yolov8-model"]
+  target = "yolo-model-rknn"
+}
+
+variable YOLO_MODEL {
+  default = null
+}
+
+target rknn-benchmark {
+  context = "./rknn"
+  target = "rknn-benchmark"
+  platforms = ["linux/arm64"]
+  tags = ["docker.io/milas/rknn-benchmark:yolov8s"]
+  contexts = notequal(null, YOLO_MODEL) ? { yolo-model-rknn = YOLO_MODEL } : {}
+}
+
+target rknn-toolkit2 {
+  context = "./rknn"
+  target = "rknn-toolkit2"
+  platforms = ["linux/amd64"]
+  tags = ["docker.io/milas/rknn-toolkit2"]
+}
