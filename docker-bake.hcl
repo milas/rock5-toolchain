@@ -46,7 +46,7 @@ variable KERNEL_REF {
 target kernel {
   target  = "kernel"
   output  = ["type=local,dest=./out/kernel"]
-  extends = ["kernel-config"]
+  inherits = ["kernel-config"]
 }
 
 target kernel-config {
