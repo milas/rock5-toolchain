@@ -3,6 +3,9 @@ name: SDK
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'rkmpp/**'
+      - 'rknn/**'
 
 jobs:
   images:
