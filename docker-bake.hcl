@@ -1,3 +1,7 @@
+variable DEBUG {
+  default = false
+}
+
 variable DEFCONFIG {
   default = null
 }
@@ -136,4 +140,76 @@ target rknn-toolkit2 {
   target = "rknn-toolkit2"
   platforms = ["linux/amd64"]
   tags = ["docker.io/milas/rknn-toolkit2"]
+}
+
+group rkmpp {
+  targets = ["rkmpp-libs", "rkmpp-ubuntu"]
+}
+
+target _rkmpp {
+  context = "./rkmpp"
+  platforms = ["linux/arm64"]
+}
+
+group rkmpp-libs {
+  targets = ["rkmpp-rga", "rkmpp-mpp", "rkmpp-gstreamer-plugin"]
+}
+
+target rkmpp-rga {
+  inherits = ["_rkmpp"]
+  target = "rockchip-rga"
+  output = ["type=local,dest=./out/rkmpp/rga"]
+}
+
+target rkmpp-mpp {
+  inherits = ["_rkmpp"]
+  target = "rockchip-mpp"
+  output = ["type=local,dest=./out/rkmpp/mpp"]
+}
+
+target rkmpp-gstreamer-plugin {
+  inherits = ["_rkmpp"]
+  target = "rockchip-gstreamer-plugin"
+  output = ["type=local,dest=./out/rkmpp/gstreamer"]
+}
+
+group rkmpp-os {
+  targets = ["rkmpp-ubuntu", "rkmpp-debian"]
+}
+
+target _rkmpp-os {
+  inherits = ["_rkmpp"]
+  target = DEBUG ? "os-debug" : "os"
+}
+
+group rkmpp-ubuntu {
+  targets = ["rkmpp-ubuntu-focal", "rkmpp-ubuntu-jammy"]
+}
+
+target rkmpp-ubuntu-focal {
+  inherits = ["_rkmpp-os"]
+  args = {
+    OS_BASE = "docker.io/ubuntu:20.04"
+  }
+  tags = ["docker.io/milas/rkmpp-ubuntu:20.04"]
+}
+
+target rkmpp-ubuntu-jammy {
+  inherits = ["_rkmpp-os"]
+  args = {
+    OS_BASE = "docker.io/ubuntu:22.04"
+  }
+  tags = ["docker.io/milas/rkmpp-ubuntu:22.04"]
+}
+
+group rkmpp-debian {
+  targets = ["rkmpp-debian-bullseye"]
+}
+
+target rkmpp-debian-bullseye {
+  inherits = ["_rkmpp-os"]
+  args = {
+    OS_BASE = "docker.io/debian:bullseye"
+  }
+  tags = ["docker.io/milas/rkmpp-debian:bullseye"]
 }
