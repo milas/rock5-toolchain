@@ -1,6 +1,5 @@
 # syntax=docker/dockerfile:1-labs
 
-#### GIT TARGETS ####
 FROM scratch AS git-kernel
 
 ARG KERNEL_REPO=https://github.com/radxa/kernel.git
@@ -35,7 +34,7 @@ ADD https://github.com/radxa/build.git#debian /
 
 FROM scratch AS git-edk2
 
-ADD https://github.com/edk2-porting/edk2-rk35xx.git#master /
+ADD --keep-git-dir=true https://github.com/edk2-porting/edk2-rk35xx.git#master /
 
 # --------------------------------------------------------------------------- #
 
@@ -59,8 +58,8 @@ ADD https://github.com/radxa/overlays.git#main /
 
 FROM --platform=${BUILDPLATFORM} alpine AS fetch
 RUN apk add --no-cache \
-    curl \
-    git \
+      curl \
+      git \
     ;
 
 # --------------------------------------------------------------------------- #
@@ -73,8 +72,12 @@ RUN curl -sS https://dl.radxa.com/tools/linux/gcc-arm-10.3-2021.07-x86_64-aarch6
 
 FROM --platform=${BUILDPLATFORM} debian:bullseye AS sdk-deps
 
-RUN apt-get update && \
-    apt-get install -y \
+RUN echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
+
+RUN --mount=type=cache,sharing=locked,id=apt-sdk-deps,target=/var/lib/apt \
+    --mount=type=cache,sharing=locked,id=apt-sdk-deps,target=/var/cache/apt \
+    apt-get update \
+    && apt-get install -y --no-install-recommends \
         bc \
         bison \
         build-essential \
@@ -91,6 +94,7 @@ RUN apt-get update && \
         python \
         rsync \
         u-boot-tools \
+    && rm -rf /var/lib/apt/lists/* \
     ;
 
 RUN ln -s /usr/bin/ccache /usr/local/bin/gcc \
@@ -179,7 +183,7 @@ RUN cd /rk3588-sdk/kernel \
 # --------------------------------------------------------------------------- #
 
 FROM kernel-builder AS kernel-build-config
-RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
+RUN --mount=type=cache,sharing=locked,id=cache-kernel,target=/rk3588-sdk/ccache/cache \
     cd /rk3588-sdk/kernel \
     && make rockchip_linux_defconfig \
     ;
@@ -188,19 +192,20 @@ RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
 
 FROM kernel-build-config AS kernel-build
 
-RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
+RUN --mount=type=cache,sharing=locked,id=cache-kernel,target=/rk3588-sdk/ccache/cache \
     cd /rk3588-sdk/kernel \
     && make -j $(nproc) \
     ;
 
-RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache ccache --show-stats > /rk3588-sdk/ccache/ccache-kernel-core.log
+RUN --mount=type=cache,sharing=locked,id=cache-kernel,target=/rk3588-sdk/ccache/cache \
+    ccache --show-stats > /rk3588-sdk/ccache/ccache-kernel-core.log
 
 # --------------------------------------------------------------------------- #
 
 FROM kernel-build AS kernel-build-modules
 
 ENV INSTALL_MOD_PATH=/rk3588-sdk/out/kernel/modules
-RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
+RUN --mount=type=cache,sharing=locked,id=cache-kernel,target=/rk3588-sdk/ccache/cache \
     mkdir -p /out \
     && cd /rk3588-sdk/kernel \
     && make modules_install INSTALL_MOD_PATH=/out \
@@ -208,7 +213,8 @@ RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
     && rm /out/lib/modules/*/source \
     ;
 
-RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache ccache --show-stats > /rk3588-sdk/ccache/ccache-kernel-modules.log
+RUN --mount=type=cache,sharing=locked,id=cache-kernel,target=/rk3588-sdk/ccache/cache \
+    ccache --show-stats > /rk3588-sdk/ccache/ccache-kernel-modules.log
 
 # --------------------------------------------------------------------------- #
 
@@ -220,12 +226,13 @@ COPY --from=kernel-build-modules --link /out /
 
 FROM kernel-build AS kernel-build-firmware
 
-RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
+RUN --mount=type=cache,sharing=locked,id=cache-kernel,target=/rk3588-sdk/ccache/cache \
     cd /rk3588-sdk/kernel \
     && make firmware \
     ;
 
-RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache ccache --show-stats > /rk3588-sdk/out/ccache-kernel-firmware.log
+RUN --mount=type=cache,sharing=locked,id=cache-kernel,target=/rk3588-sdk/ccache/cache \
+    ccache --show-stats > /rk3588-sdk/out/ccache-kernel-firmware.log
 
 # --------------------------------------------------------------------------- #
 
@@ -257,7 +264,7 @@ FROM u-boot-radxa-builder AS u-boot-radxa-build
 
 ARG CHIP="rk3588"
 ARG BOARD="rock-5b"
-RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
+RUN --mount=type=cache,sharing=locked,id=cache-u-boot-radxa,target=/rk3588-sdk/ccache/cache \
     ./build/mk-uboot.sh "${CHIP}-${BOARD}" \
     ;
 
@@ -271,13 +278,16 @@ COPY --from=u-boot-radxa-build --link /rk3588-sdk/out/u-boot/ /
 
 FROM sdk-base as u-boot-collabora-builder
 
-RUN apt-get update \
+RUN --mount=type=cache,sharing=locked,id=apt-u-boot-collabora,target=/var/lib/apt \
+    --mount=type=cache,sharing=locked,id=apt-u-boot-collabora,target=/var/cache/apt \
+    apt-get update \
     && apt-get install -y \
-    python3 \
-    python3-dev \
-    python3-pyelftools \
-    python3-setuptools \
-    swig \
+      python3 \
+      python3-dev \
+      python3-pyelftools \
+      python3-setuptools \
+      swig \
+    && rm -rf /var/lib/apt/lists/* \
     ;
 
 COPY --from=git-rkbin --link /bin/rk35/rk3588_ddr_lp4_2112MHz_lp5_2736MHz_v1.08.bin /rk3588-sdk/u-boot/rockchip-tpl
@@ -292,7 +302,7 @@ FROM u-boot-collabora-builder AS u-boot-collabora-build
 
 ARG CHIP="rk3588"
 ARG BOARD="rock-5b"
-RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
+RUN --mount=type=cache,sharing=locked,id=cache-u-boot-collabora,target=/rk3588-sdk/ccache/cache \
     cd /rk3588-sdk/u-boot \
     && make "$(echo "${BOARD}" | tr -d '-')-${CHIP}_defconfig" \
     && make \
@@ -329,7 +339,7 @@ FROM u-boot-radxa-builder AS u-boot-radxa-tools-build
 
 ARG CHIP="rk3588"
 ARG BOARD="rock-5b"
-RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
+RUN --mount=type=cache,sharing=locked,id=cache-u-boot-radxa,target=/rk3588-sdk/ccache/cache \
     cd /rk3588-sdk/u-boot \
     && make "${BOARD}-${CHIP}_defconfig" \
     && make tools \
@@ -347,16 +357,20 @@ COPY --from=u-boot-radxa-tools-build --link /rk3588-sdk/u-boot/tools/mkimage /
 
 FROM sdk-base AS edk2-deps
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,sharing=locked,id=apt-edk2,target=/var/lib/apt \
+    --mount=type=cache,sharing=locked,id=apt-edk2,target=/var/cache/apt \
+    apt-get update \
+    && apt-get install -y --no-install-recommends \
         binutils-aarch64-linux-gnu \
         device-tree-compiler \
         gcc-aarch64-linux-gnu \
         git \
+        gettext \
         iasl \
         libc-dev-arm64-cross \
         python3-pyelftools \
         uuid-dev \
+    && rm -rf /var/lib/apt/lists/* \
     ;
 
 # --------------------------------------------------------------------------- #
@@ -382,7 +396,7 @@ FROM edk2-builder-base AS edk2-builder-amd64
 FROM edk2-builder-${BUILDARCH} AS edk2-build
 
 ARG BOARD="rock-5b"
-RUN --mount=type=cache,dst=/rk3588-sdk/ccache/cache \
+RUN --mount=type=cache,sharing=locked,id=cache-edk2,target=/rk3588-sdk/ccache/cache \
     /rk3588-sdk/edk2-rk35xx/build.sh -d "${BOARD}"
 
 # --------------------------------------------------------------------------- #
@@ -395,14 +409,18 @@ COPY --from=edk2-build --link /rk3588-sdk/edk2-rk35xx/RK3588_NOR_FLASH.img /
 
 FROM sdk-base AS rkdeveloptool-build
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,sharing=locked,id=apt-rkdeveloptool-build,target=/var/lib/apt \
+    --mount=type=cache,sharing=locked,id=apt-rkdeveloptool-build,target=/var/cache/apt \
+    apt-get update \
+    && apt-get install -y --no-install-recommends \
+      ca-certificates \
       curl \
       dh-autoreconf \
       git \
       libudev-dev \
       libusb-1.0-0-dev \
       pkg-config \
+    && rm -rf /var/lib/apt/lists/* \
     ;
 
 COPY --from=git-rkdeveloptool --link / /rk3588-sdk/rkdeveloptool
@@ -421,9 +439,12 @@ RUN cd /rk3588-sdk/rkdeveloptool \
 
 FROM debian:bullseye AS rkdeveloptool
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,sharing=locked,id=apt-rkdeveloptool,target=/var/lib/apt \
+    --mount=type=cache,sharing=locked,id=apt-rkdeveloptool,target=/var/cache/apt \
+    apt-get update \
+    && apt-get install -y --no-install-recommends \
         libusb-1.0.0 \
+    && rm -rf /var/lib/apt/lists/* \
     ;
 
 COPY --from=rkdeveloptool-build --link /rk3588-sdk/rkdeveloptool/rkdeveloptool /usr/local/bin/
