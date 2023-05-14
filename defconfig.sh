@@ -35,11 +35,10 @@ fi
 docker rm -f rock5-kernel-config >/dev/null 2>&1 || true
 
 # shellcheck disable=SC2086
-docker buildx bake \
+(cd "$(dirname "${self}")" && docker buildx bake \
   --pull \
   --load \
-  -f "$(dirname "${self}")"/docker-bake.hcl \
-  kernel-config
+  kernel-config)
 
 docker run -it \
   --name rock5-kernel-config \
