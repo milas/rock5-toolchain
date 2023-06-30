@@ -16,7 +16,7 @@ ADD https://github.com/radxa/u-boot.git#stable-5.10-rock5 /
 
 FROM scratch AS git-u-boot-collabora
 
-ADD https://gitlab.collabora.com/hardware-enablement/rockchip-3588/u-boot.git#2023.07-rc1-rock5b /
+ADD https://gitlab.collabora.com/hardware-enablement/rockchip-3588/u-boot.git#2023.07-rc4-rock5b /
 
 # --------------------------------------------------------------------------- #
 
@@ -290,8 +290,8 @@ RUN --mount=type=cache,sharing=locked,id=apt-u-boot-collabora,target=/var/lib/ap
     && rm -rf /var/lib/apt/lists/* \
     ;
 
-COPY --from=git-rkbin --link /bin/rk35/rk3588_ddr_lp4_2112MHz_lp5_2736MHz_v1.08.bin /rk3588-sdk/u-boot/rockchip-tpl
-COPY --from=git-rkbin --link /bin/rk35/rk3588_bl31_v1.34.elf /rk3588-sdk/u-boot/atf-bl31
+COPY --from=git-rkbin --link /bin/rk35/rk3588_ddr_lp4_2112MHz_lp5_2736MHz_v1.11.bin /rk3588-sdk/u-boot/rockchip-tpl
+COPY --from=git-rkbin --link /bin/rk35/rk3588_bl31_v1.38.elf /rk3588-sdk/u-boot/atf-bl31
 COPY --from=git-u-boot-collabora --link / /rk3588-sdk/u-boot
 
 WORKDIR /rk3588-sdk/u-boot
