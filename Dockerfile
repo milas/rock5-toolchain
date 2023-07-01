@@ -240,7 +240,7 @@ FROM scratch AS kernel
 
 COPY --from=kernel-build --link /rk3588-sdk/kernel/arch/arm64/boot/Image /vmlinuz
 
-COPY --from=kernel-build --link /rk3588-sdk/kernel/arch/arm64/boot/dts/rockchip/rk3588-rock-5*.dtb /dtb/rockchip/
+COPY --from=kernel-build --link /rk3588-sdk/kernel/arch/arm64/boot/dts/rockchip/rk3588*-rock-5*.dtb /dtb/rockchip/
 COPY --from=kernel-build --link /rk3588-sdk/kernel/arch/arm64/boot/dts/rockchip/overlays/rock-5*.dtbo /dtb/rockchip/overlay/
 COPY --from=kernel-build --link /rk3588-sdk/kernel/arch/arm64/boot/dts/rockchip/overlays/rk3588*.dtbo /dtb/rockchip/overlay/
 COPY --from=kernel-modules --link / /
