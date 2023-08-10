@@ -70,7 +70,7 @@ RUN curl -sS https://dl.radxa.com/tools/linux/gcc-arm-10.3-2021.07-x86_64-aarch6
 
 # --------------------------------------------------------------------------- #
 
-FROM --platform=${BUILDPLATFORM} debian:bullseye AS sdk-deps
+FROM debian:bullseye AS sdk-deps
 
 RUN echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
 
