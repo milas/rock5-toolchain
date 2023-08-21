@@ -8,21 +8,26 @@ Dockerized build system for Rockchip MPP with Gstreamer to provide accelerated v
     * Cross-compilation from `amd64` not currently supported
 
 ## Quick Start
-Run the pre-built Ubuntu image:
+Run the pre-built Debian Bullseye image:
 ```shell
-docker run -it --privileged docker.io/milas/rkmpp-ubuntu:20.04 
+docker run -it --privileged docker.io/milas/rkmpp-debian:bullseye 
 ```
 > 💡 The `--privileged` flag is required to allow access to the hardware encoder/decoder.
 
 Individual groups and targets also exist if you don't want to build everything or want to use one of the experimental targets.
 
-## Debian
+## Debian - Bullseye (11)
 Debian with the necessary Rockchip and Gstreamer libraries.
 
-### Bullseye (11)
+This version is chosen to most closely align with the Rockchip libraries for compatibility.
+I would recommend using multi-stage builds with this as the final stage.
+
+You're also welcome to try `--set='*.build-arg=OS_BASE=debian:bookworm'` to build with Bookworm as the base image, for example.
+Ubuntu could be done the same way.
+
 Build the image:
 ```shell
-docker buildx bake rkmpp-debian-bullseye --load
+docker buildx bake rkmpp-debian --load
 ```
 _This step is **optional**. Pre-built images are [available on Docker Hub][hub/rkmpp-debian]._
 
@@ -31,35 +36,8 @@ Run the image:
 docker run -it --privileged docker.io/milas/rkmpp-debian:bullseye 
 ```
 
-## Ubuntu
-Ubuntu with the necessary Rockchip and Gstreamer libraries.
-
-### 20.04 (Focal)
-Build the image:
-```shell
-docker buildx bake rkmpp-ubuntu-focal --load
-```
-_This step is **optional**. Pre-built images are [available on Docker Hub][hub/rkmpp-ubuntu]._
-
-Run the image:
-```shell
-docker run -it --privileged docker.io/milas/rkmpp-ubuntu:20.04 
-```
-
-### 22.04 (Jammy)
-Build the image:
-```shell
-docker buildx bake rkmpp-ubuntu-jammy --load
-```
-_This step is **optional**. Pre-built images are [available on Docker Hub][hub/rkmpp-ubuntu]._
-
-Run the image:
-```shell
-docker run -it --privileged docker.io/milas/rkmpp-ubuntu:22.04 
-```
-
 ## `librga` aka RGA (Raster Graphic Acceleration Unit)
-**Upstream**: https://github.com/JeffyCN/mirrors/tree/linux-rga
+**Upstream**: https://github.com/JeffyCN/mirrors/tree/linux-rga-multi
 
 ```shell
 docker buildx bake rkmpp-rga
@@ -72,18 +50,30 @@ out/rkmpp
             ├── include
             │   └── rga
             │       ├── drmrga.h
+            │       ├── GrallocOps.h
+            │       ├── im2d_buffer.h
+            │       ├── im2d_common.h
+            │       ├── im2d_expand.h
+            │       ├── im2d.h
+            │       ├── im2d.hpp
+            │       ├── im2d_mpi.h
+            │       ├── im2d_single.h
+            │       ├── im2d_task.h
+            │       ├── im2d_type.h
+            │       ├── im2d_version.h
             │       ├── RgaApi.h
             │       ├── rga.h
-            │       ├── RockchipRga.h
-            │       └── RockchipRgaMacro.h
+            │       ├── RgaMutex.h
+            │       ├── RgaSingleton.h
+            │       ├── RgaUtils.h
+            │       └── RockchipRga.h
             └── lib
                 ├── librga.so -> librga.so.2
-                ├── librga.so.2 -> librga.so.2.0.0
-                ├── librga.so.2.0.0
+                ├── librga.so.2 -> librga.so.2.1.0
+                ├── librga.so.2.1.0
                 └── pkgconfig
                     └── librga.pc
 ```
-
 
 ## `mpp` aka MPP (Media Process Platform)
 **Upstream**: https://github.com/rockchip-linux/mpp/tree/develop
@@ -162,4 +152,3 @@ out/rkmpp
 ```
 
 [hub/rkmpp-debian]: https://hub.docker.com/r/milas/rkmpp-debian/
-[hub/rkmpp-ubuntu]: https://hub.docker.com/r/milas/rkmpp-ubuntu/

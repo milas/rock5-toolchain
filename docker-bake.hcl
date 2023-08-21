@@ -143,7 +143,7 @@ target rknn-toolkit2 {
 }
 
 group rkmpp {
-  targets = ["rkmpp-libs", "rkmpp-ubuntu"]
+  targets = ["rkmpp-libs", "rkmpp-debian"]
 }
 
 target _rkmpp {
@@ -173,41 +173,9 @@ target rkmpp-gstreamer-plugin {
   output = ["type=local,dest=./out/rkmpp/gstreamer"]
 }
 
-group rkmpp-os {
-  targets = ["rkmpp-ubuntu", "rkmpp-debian"]
-}
-
-target _rkmpp-os {
+target rkmpp-debian {
   inherits = ["_rkmpp"]
-  target = DEBUG ? "os-debug" : "os"
-}
-
-group rkmpp-ubuntu {
-  targets = ["rkmpp-ubuntu-focal", "rkmpp-ubuntu-jammy"]
-}
-
-target rkmpp-ubuntu-focal {
-  inherits = ["_rkmpp-os"]
-  args = {
-    OS_BASE = "docker.io/ubuntu:20.04"
-  }
-  tags = ["docker.io/milas/rkmpp-ubuntu:20.04"]
-}
-
-target rkmpp-ubuntu-jammy {
-  inherits = ["_rkmpp-os"]
-  args = {
-    OS_BASE = "docker.io/ubuntu:22.04"
-  }
-  tags = ["docker.io/milas/rkmpp-ubuntu:22.04"]
-}
-
-group rkmpp-debian {
-  targets = ["rkmpp-debian-bullseye"]
-}
-
-target rkmpp-debian-bullseye {
-  inherits = ["_rkmpp-os"]
+  target = "os"
   args = {
     OS_BASE = "docker.io/debian:bullseye"
   }
