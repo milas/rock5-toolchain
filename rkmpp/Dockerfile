@@ -16,7 +16,7 @@ ADD --keep-git-dir=true https://github.com/rockchip-linux/mpp.git#develop /
 
 FROM scratch AS git-rockchip-rga
 
-ADD https://github.com/JeffyCN/mirrors.git#linux-rga /
+ADD https://github.com/JeffyCN/mirrors.git#linux-rga-multi /
 
 # --------------------------------------------------------------------------- #
 
