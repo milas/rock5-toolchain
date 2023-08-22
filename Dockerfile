@@ -70,12 +70,34 @@ RUN curl -sS https://dl.radxa.com/tools/linux/gcc-arm-10.3-2021.07-x86_64-aarch6
 
 # --------------------------------------------------------------------------- #
 
-FROM debian:bullseye AS sdk-deps
+FROM --platform=linux/amd64 debian:bullseye AS sdk-base-amd64
+
+COPY --from=dl-cross-compiler --link /cross-compile /rk3588-sdk/cross-compile
+
+RUN mkdir -p /rk3588-sdk/ccache/bin \
+    && ln -s /usr/bin/ccache /rk3588-sdk/ccache/bin/aarch64-none-linux-gnu-gcc \
+    && ln -s /usr/bin/ccache /rk3588-sdk/ccache/bin/aarch64-none-linux-gnu-g++ \
+    ;
+
+# ccache shims first, then real cross-compiler
+ENV PATH="/rk3588-sdk/ccache/bin:/rk3588-sdk/cross-compile/bin:${PATH}"
+ENV CROSS_COMPILE=aarch64-none-linux-gnu-
+
+ENV ARCH=arm64
+
+# --------------------------------------------------------------------------- #
+
+FROM --platform=linux/arm64 debian:bullseye AS sdk-base-arm64
+# no extra configuration required
+
+# --------------------------------------------------------------------------- #
+
+FROM sdk-base-${BUILDARCH} AS sdk-base
 
 RUN echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
 
 RUN --mount=type=cache,sharing=locked,id=apt-sdk-deps,target=/var/lib/apt \
-    --mount=type=cache,sharing=locked,id=apt-sdk-deps,target=/var/cache/apt \
+    --mount=type=cache,sharing=locked,id=apt-sdk-deps-cache,target=/var/cache/apt \
     apt-get update \
     && apt-get install -y --no-install-recommends \
         bc \
@@ -101,33 +123,8 @@ RUN ln -s /usr/bin/ccache /usr/local/bin/gcc \
     && ln -s /usr/bin/ccache /usr/local/bin/g++ \
     ;
 ENV CCACHE_DIR=/rk3588-sdk/ccache/cache
-ENV ARCH=arm64
 
 WORKDIR /rk3588-sdk
-
-# --------------------------------------------------------------------------- #
-
-FROM sdk-deps AS sdk-base-amd64
-
-COPY --from=dl-cross-compiler --link /cross-compile /rk3588-sdk/cross-compile
-
-RUN mkdir -p /rk3588-sdk/ccache/bin \
-    && ln -s /usr/bin/ccache /rk3588-sdk/ccache/bin/aarch64-none-linux-gnu-gcc \
-    && ln -s /usr/bin/ccache /rk3588-sdk/ccache/bin/aarch64-none-linux-gnu-g++ \
-    ;
-
-# ccache shims first, then real cross-compiler
-ENV PATH="/rk3588-sdk/ccache/bin:/rk3588-sdk/cross-compile/bin:${PATH}"
-ENV CROSS_COMPILE=aarch64-none-linux-gnu-
-
-# --------------------------------------------------------------------------- #
-
-FROM sdk-deps AS sdk-base-arm64
-# no extra configuration required
-
-# --------------------------------------------------------------------------- #
-
-FROM sdk-base-${BUILDARCH} AS sdk-base
 
 # --------------------------------------------------------------------------- #
 
