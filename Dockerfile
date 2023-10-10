@@ -73,14 +73,7 @@ RUN curl -sS https://dl.radxa.com/tools/linux/gcc-arm-10.3-2021.07-x86_64-aarch6
 FROM --platform=linux/amd64 debian:bullseye AS sdk-base-amd64
 
 COPY --from=dl-cross-compiler --link /cross-compile /rk3588-sdk/cross-compile
-
-RUN mkdir -p /rk3588-sdk/ccache/bin \
-    && ln -s /usr/bin/ccache /rk3588-sdk/ccache/bin/aarch64-none-linux-gnu-gcc \
-    && ln -s /usr/bin/ccache /rk3588-sdk/ccache/bin/aarch64-none-linux-gnu-g++ \
-    ;
-
-# ccache shims first, then real cross-compiler
-ENV PATH="/rk3588-sdk/ccache/bin:/rk3588-sdk/cross-compile/bin:${PATH}"
+ENV PATH="/rk3588-sdk/cross-compile/bin:${PATH}"
 ENV CROSS_COMPILE=aarch64-none-linux-gnu-
 
 ENV ARCH=arm64
@@ -105,7 +98,6 @@ RUN --mount=type=cache,sharing=locked,id=apt-sdk-deps,target=/var/lib/apt \
         build-essential \
         device-tree-compiler \
         dosfstools \
-        ccache \
         flex \
         git \
         kmod \
@@ -113,16 +105,13 @@ RUN --mount=type=cache,sharing=locked,id=apt-sdk-deps,target=/var/lib/apt \
         libncurses5-dev \
         libssl-dev \
         mtools \
+        ostree \
         python \
+        rpm \
         rsync \
         u-boot-tools \
     && rm -rf /var/lib/apt/lists/* \
     ;
-
-RUN ln -s /usr/bin/ccache /usr/local/bin/gcc \
-    && ln -s /usr/bin/ccache /usr/local/bin/g++ \
-    ;
-ENV CCACHE_DIR=/rk3588-sdk/ccache/cache
 
 WORKDIR /rk3588-sdk
 
@@ -180,8 +169,7 @@ RUN cd /rk3588-sdk/kernel \
 # --------------------------------------------------------------------------- #
 
 FROM kernel-builder AS kernel-build-config
-RUN --mount=type=cache,sharing=locked,id=cache-kernel,target=/rk3588-sdk/ccache/cache \
-    cd /rk3588-sdk/kernel \
+RUN cd /rk3588-sdk/kernel \
     && make rockchip_linux_defconfig \
     ;
 
@@ -189,29 +177,32 @@ RUN --mount=type=cache,sharing=locked,id=cache-kernel,target=/rk3588-sdk/ccache/
 
 FROM kernel-build-config AS kernel-build
 
-RUN --mount=type=cache,sharing=locked,id=cache-kernel,target=/rk3588-sdk/ccache/cache \
-    cd /rk3588-sdk/kernel \
+RUN cd /rk3588-sdk/kernel \
     && make -j $(nproc) \
     ;
 
-RUN --mount=type=cache,sharing=locked,id=cache-kernel,target=/rk3588-sdk/ccache/cache \
-    ccache --show-stats > /rk3588-sdk/ccache/ccache-kernel-core.log
+FROM kernel-build-config AS kernel-build-rpm
+
+RUN cd /rk3588-sdk/kernel \
+    && make -j $(nproc) rpm-pkg \
+    ;
+
+FROM scratch AS kernel-rpm
+
+COPY --link --from=kernel-build-rpm /root/rpmbuild/RPMS/aarch64/ /
+COPY --link --from=kernel-build-rpm /root/rpmbuild/SRPMS/ /
 
 # --------------------------------------------------------------------------- #
 
 FROM kernel-build AS kernel-build-modules
 
 ENV INSTALL_MOD_PATH=/rk3588-sdk/out/kernel/modules
-RUN --mount=type=cache,sharing=locked,id=cache-kernel,target=/rk3588-sdk/ccache/cache \
-    mkdir -p /out \
+RUN mkdir -p /out \
     && cd /rk3588-sdk/kernel \
     && make modules_install INSTALL_MOD_PATH=/out \
     && rm /out/lib/modules/*/build \
     && rm /out/lib/modules/*/source \
     ;
-
-RUN --mount=type=cache,sharing=locked,id=cache-kernel,target=/rk3588-sdk/ccache/cache \
-    ccache --show-stats > /rk3588-sdk/ccache/ccache-kernel-modules.log
 
 # --------------------------------------------------------------------------- #
 
@@ -223,13 +214,9 @@ COPY --from=kernel-build-modules --link /out /
 
 FROM kernel-build AS kernel-build-firmware
 
-RUN --mount=type=cache,sharing=locked,id=cache-kernel,target=/rk3588-sdk/ccache/cache \
-    cd /rk3588-sdk/kernel \
+RUN cd /rk3588-sdk/kernel \
     && make firmware \
     ;
-
-RUN --mount=type=cache,sharing=locked,id=cache-kernel,target=/rk3588-sdk/ccache/cache \
-    ccache --show-stats > /rk3588-sdk/out/ccache-kernel-firmware.log
 
 # --------------------------------------------------------------------------- #
 
@@ -261,8 +248,7 @@ FROM u-boot-radxa-builder AS u-boot-radxa-build
 
 ARG CHIP="rk3588"
 ARG BOARD="rock-5b"
-RUN --mount=type=cache,sharing=locked,id=cache-u-boot-radxa,target=/rk3588-sdk/ccache/cache \
-    ./build/mk-uboot.sh "${CHIP}-${BOARD}" \
+RUN ./build/mk-uboot.sh "${CHIP}-${BOARD}" \
     ;
 
 # --------------------------------------------------------------------------- #
@@ -299,8 +285,7 @@ FROM u-boot-collabora-builder AS u-boot-collabora-build
 
 ARG CHIP="rk3588"
 ARG BOARD="rock-5b"
-RUN --mount=type=cache,sharing=locked,id=cache-u-boot-collabora,target=/rk3588-sdk/ccache/cache \
-    cd /rk3588-sdk/u-boot \
+RUN cd /rk3588-sdk/u-boot \
     && make "$(echo "${BOARD}" | tr -d '-')-${CHIP}_defconfig" \
     && make \
     ;
@@ -336,8 +321,7 @@ FROM u-boot-radxa-builder AS u-boot-radxa-tools-build
 
 ARG CHIP="rk3588"
 ARG BOARD="rock-5b"
-RUN --mount=type=cache,sharing=locked,id=cache-u-boot-radxa,target=/rk3588-sdk/ccache/cache \
-    cd /rk3588-sdk/u-boot \
+RUN cd /rk3588-sdk/u-boot \
     && make "${BOARD}-${CHIP}_defconfig" \
     && make tools \
     ;
@@ -393,8 +377,7 @@ FROM edk2-builder-base AS edk2-builder-amd64
 FROM edk2-builder-${BUILDARCH} AS edk2-build
 
 ARG BOARD="rock-5b"
-RUN --mount=type=cache,sharing=locked,id=cache-edk2,target=/rk3588-sdk/ccache/cache \
-    /rk3588-sdk/edk2-rk35xx/build.sh -d "${BOARD}"
+RUN /rk3588-sdk/edk2-rk35xx/build.sh -d "${BOARD}"
 
 # --------------------------------------------------------------------------- #
 
