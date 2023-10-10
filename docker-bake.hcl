@@ -181,3 +181,10 @@ target rkmpp-debian {
   }
   tags = ["docker.io/milas/rkmpp-debian:bullseye"]
 }
+
+target rpm {
+  target  = "kernel-rpm"
+  output  = ["type=local,dest=./out/kernel"]
+  inherits = ["kernel-config"]
+  tags = []
+}
