@@ -16,7 +16,7 @@ ADD https://github.com/radxa/u-boot.git#stable-5.10-rock5 /
 
 FROM scratch AS git-u-boot-collabora
 
-ADD https://gitlab.collabora.com/hardware-enablement/rockchip-3588/u-boot.git#2023.07-rc4-rock5b /
+ADD https://gitlab.collabora.com/hardware-enablement/rockchip-3588/u-boot.git#2023.10-rk3588 /
 
 # --------------------------------------------------------------------------- #
 
